@@ -1,0 +1,162 @@
+:root {
+  /* Default: Dark Theme */
+  --bg-base: #0f172a;
+  --bg-surface: #1e293b;
+  --bg-input: #0b1120;
+  --text-heading: #f8fafc;
+  --text-main: #e2e8f0;
+  --text-muted: #94a3b8;
+  --border: #334155;
+  --chip-bg: #334155;
+  --code-bg: #1e293b;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+}
+
+body.light {
+  --bg-base: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-input: #f1f5f9;
+  --text-heading: #0f172a;
+  --text-main: #334155;
+  --text-muted: #64748b;
+  --border: #e2e8f0;
+  --chip-bg: #f1f5f9;
+  --code-bg: #f1f5f9;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-base);
+  color: var(--text-main);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* App container */
+.app-layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.main-writing-area {
+  flex: 1;
+  width: 100%;
+  max-width: 840px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 6rem 1.5rem;
+  box-sizing: border-box;
+}
+
+/* Title Input on Writing Surface */
+.post-main-title {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-heading);
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  outline: none;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.post-main-title::placeholder {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+/* Meta Bar under title */
+.post-meta-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 2rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+}
+
+.meta-item:hover {
+  color: var(--accent);
+}
+
+.meta-item svg {
+  width: 14px;
+  height: 14px;
+}
+
+.meta-dot {
+  opacity: 0.4;
+}
+
+/* Bottom Floating Status Bar */
+.bottom-status-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 38px;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.25rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  z-index: 30;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.status-left, .status-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+/* PWA safe area support */
+@supports (padding: env(safe-area-inset-top)) {
+  .app-header {
+    padding-top: env(safe-area-inset-top);
+    height: calc(56px + env(safe-area-inset-top));
+  }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}

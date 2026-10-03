@@ -1,0 +1,27 @@
+{
+  "name": "alvalog-cms",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@milkdown/core": "^7.5.4",
+    "@milkdown/ctx": "^7.5.4",
+    "@milkdown/plugin-history": "^7.5.4",
+    "@milkdown/plugin-listener": "^7.5.4",
+    "@milkdown/preset-commonmark": "^7.5.4",
+    "@milkdown/utils": "^7.5.4",
+    "@milkdown/vue": "^7.5.4",
+    "js-yaml": "^4.1.0",
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "vite": "^6.0.0",
+    "vite-plugin-pwa": "^0.21.0"
+  }
+}
