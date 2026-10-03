@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import HeaderNav from './components/HeaderNav.vue';
+import { MilkdownProvider } from '@milkdown/vue';
 import MarkdownEditor from './components/MarkdownEditor.vue';
 import SourceEditor from './components/SourceEditor.vue';
 import FrontmatterDrawer from './components/FrontmatterDrawer.vue';
@@ -381,12 +382,13 @@ watch(isSourceMode, (newVal) => {
         v-model="markdownContent"
         @update:modelValue="onContentUpdate"
       />
-      <MarkdownEditor
-        v-else
-        ref="editorRef"
-        :initialContent="markdownContent"
-        @update="onContentUpdate"
-      />
+      <MilkdownProvider v-else>
+        <MarkdownEditor
+          ref="editorRef"
+          :initialContent="markdownContent"
+          @update="onContentUpdate"
+        />
+      </MilkdownProvider>
     </main>
 
     <!-- Bottom Status Bar -->
