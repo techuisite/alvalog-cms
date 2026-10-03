@@ -2,21 +2,24 @@ import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import { VitePWA } from 'vite-plugin-pwa';
 
-export default defineConfig({
-  plugins: [
-    vue(),
-    VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
-      manifest: {
-        name: 'Alvalog CMS',
-        short_name: 'Alvalog',
-        description: 'Clean, distraction-free MarkText-style CMS for Alvalog',
-        theme_color: '#0f172a',
-        background_color: '#0f172a',
-        display: 'standalone',
-        orientation: 'any',
-        start_url: '/',
+export default defineConfig(({ mode }) => {
+  const base = mode === 'development' ? '/' : (process.env.BASE_PATH || '/alvalog-cms/');
+  return {
+    base,
+    plugins: [
+      vue(),
+      VitePWA({
+        registerType: 'autoUpdate',
+        includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+        manifest: {
+          name: 'Alvalog CMS',
+          short_name: 'Alvalog',
+          description: 'Clean, distraction-free MarkText-style CMS for Alvalog',
+          theme_color: '#0f172a',
+          background_color: '#0f172a',
+          display: 'standalone',
+          orientation: 'any',
+          start_url: base,
         icons: [
           {
             src: 'pwa-192x192.png',
@@ -52,4 +55,5 @@ export default defineConfig({
     port: 5173,
     host: true
   }
+};
 });
