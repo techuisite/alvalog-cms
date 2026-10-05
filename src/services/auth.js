@@ -37,8 +37,8 @@ export function isSecuritySetup() {
 }
 
 export function isSessionUnlocked() {
-  // If no security set up, it's always unlocked
-  if (!isSecuritySetup()) return true;
+  // If no security set up yet, require setup (so lock/setup screen shows)
+  if (!isSecuritySetup()) return false;
   return sessionStorage.getItem(STORAGE_KEYS.SESSION_UNLOCKED) === 'true';
 }
 
