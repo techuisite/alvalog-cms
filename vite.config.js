@@ -3,7 +3,7 @@ import vue from '@vitejs/plugin-vue';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(({ mode }) => {
-  const base = mode === 'development' ? '/' : (process.env.BASE_PATH || '/alvalog-cms/');
+  const base = process.env.BASE_PATH || '/';
   return {
     base,
     plugins: [
