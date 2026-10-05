@@ -26,10 +26,24 @@ import { useDrafts } from './composables/useDrafts.js';
 
 // State
 const editorRef = ref(null);
+const sourceEditorRef = ref(null);
+const subTitleRef = ref(null);
 const isSourceMode = ref(false);
 const isDark = ref(localStorage.getItem('alvalog_theme') !== 'light');
 const isSaving = ref(false);
 const isSavingDraft = ref(false);
+
+function focusSubTitle() {
+  subTitleRef.value?.focus();
+}
+
+function focusBodyEditor() {
+  if (isSourceMode.value) {
+    sourceEditorRef.value?.focus(true);
+  } else {
+    editorRef.value?.focus(true);
+  }
+}
 
 // Security & Lock State
 const isUnlocked = ref(isSessionUnlocked());
@@ -440,6 +454,14 @@ function handleGlobalKeydown(e) {
     e.preventDefault();
     isSourceMode.value = !isSourceMode.value;
   }
+  // Lock CMS shortcut: Cmd+Ctrl+L (iPadOS/macOS) or Win+Ctrl+L (Windows)
+  if (
+    (e.metaKey && e.ctrlKey && (e.key.toLowerCase() === 'l' || e.code === 'KeyL')) ||
+    ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key.toLowerCase() === 'l' || e.code === 'KeyL'))
+  ) {
+    e.preventDefault();
+    handleLockApp();
+  }
 }
 
 onMounted(() => {
@@ -522,13 +544,16 @@ watch(isSourceMode, (newVal) => {
           class="post-main-title"
           :value="frontmatter.title"
           @input="onMainTitleChange"
+          @keydown.enter.prevent="focusSubTitle"
           placeholder="Post Title..."
         />
         <input
+          ref="subTitleRef"
           type="text"
           class="post-sub-title"
           :value="frontmatter.description || ''"
           @input="onSubTitleChange"
+          @keydown.enter.prevent="focusBodyEditor"
           placeholder="Add a subheader or summary..."
         />
       </div>
@@ -536,6 +561,7 @@ watch(isSourceMode, (newVal) => {
       <!-- Editor Canvas: Visual (Milkdown) or Source (Raw Markdown) -->
       <SourceEditor
         v-if="isSourceMode"
+        ref="sourceEditorRef"
         v-model="markdownContent"
         @update:modelValue="onContentUpdate"
       />

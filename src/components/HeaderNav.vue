@@ -206,12 +206,13 @@ onBeforeUnmount(() => {
               <span>GitHub Settings</span>
             </button>
 
-            <button class="menu-item menu-item-lock" @click="emit('lockApp'); showMenu = false">
+            <button class="menu-item menu-item-lock" @click="emit('lockApp'); showMenu = false" title="Lock CMS (Win/Cmd + Ctrl + L)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
               </svg>
               <span>Lock CMS Session</span>
+              <span class="menu-shortcut">⌘⌃L</span>
             </button>
           </div>
         </div>
@@ -538,6 +539,18 @@ onBeforeUnmount(() => {
 
 .menu-item-lock:hover svg {
   color: #ef4444;
+}
+
+.menu-shortcut {
+  margin-left: auto;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  opacity: 0.75;
 }
 
 @media (max-width: 580px) {

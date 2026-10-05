@@ -66,6 +66,17 @@ watch(() => props.modelValue, () => {
 onMounted(() => {
   adjustHeight();
 });
+
+function focus(atStart = true) {
+  if (textareaRef.value) {
+    textareaRef.value.focus();
+    if (atStart) {
+      textareaRef.value.setSelectionRange(0, 0);
+    }
+  }
+}
+
+defineExpose({ focus });
 </script>
 
 <template>
