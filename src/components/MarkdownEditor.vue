@@ -1,8 +1,8 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { Milkdown, useEditor } from '@milkdown/vue';
-import { Editor, rootCtx, defaultValueCtx, editorViewCtx } from '@milkdown/core';
-import { commonmark, linkSchema } from '@milkdown/preset-commonmark';
+import { Editor, rootCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx } from '@milkdown/core';
+import { commonmark, linkSchema, hrSchema } from '@milkdown/preset-commonmark';
 import { history } from '@milkdown/plugin-history';
 import { listener, listenerCtx } from '@milkdown/plugin-listener';
 import { replaceAll, $inputRule } from '@milkdown/utils';
@@ -56,25 +56,92 @@ const autoLinkInputRule = $inputRule((ctx) => {
   );
 });
 
-// Typewriter / Bottom-screen scrolling
-function handleTypewriterScroll() {
-  const selection = window.getSelection();
-  if (!selection || !selection.rangeCount) return;
-  const range = selection.getRangeAt(0);
-  const rect = range.getBoundingClientRect();
+// Input rule: Auto-convert `--- ` or `---` at start of line to horizontal divider rule <hr>
+const customHrInputRule = $inputRule((ctx) => {
+  return new InputRule(
+    /^(?:---\s?|___\s|\*\*\*\s)$/,
+    (state, match, start, end) => {
+      const { tr } = state;
+      if (match[0]) {
+        tr.replaceWith(start - 1, end, hrSchema.type(ctx).create());
+      }
+      return tr;
+    }
+  );
+});
 
-  if (!rect || (rect.top === 0 && rect.bottom === 0)) return;
+// Input rule: Auto-convert `-- ` inside text or at start to em-dash `— ` (the long dash line)
+const emDashInputRule = $inputRule((ctx) => {
+  return new InputRule(
+    /(?:^|[^-])(--)\s$/,
+    (state, match, start, end) => {
+      const { tr } = state;
+      const mOffset = match[0].indexOf('--');
+      const dashStart = start + mOffset;
+      tr.replaceWith(dashStart, end, state.schema.text('— '));
+      return tr;
+    }
+  );
+});
 
-  const viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-  const comfortBottom = viewportHeight * 0.52; // Keep in comfortable upper-middle
-
-  if (rect.bottom > comfortBottom) {
-    const scrollAmount = rect.bottom - comfortBottom;
-    window.scrollBy({
-      top: scrollAmount,
-      behavior: 'smooth'
-    });
+// Robust cursor coordinates detector (handles collapsed carets, iOS Safari, and ProseMirror)
+function getCaretRect() {
+  try {
+    const editor = get();
+    if (editor) {
+      const view = editor.action((ctx) => ctx.get(editorViewCtx));
+      if (view && view.state) {
+        const pos = view.state.selection.from;
+        const coords = view.coordsAtPos(pos);
+        if (coords && (coords.top !== 0 || coords.bottom !== 0)) {
+          return coords;
+        }
+      }
+    }
+  } catch (e) {
+    // fallback
   }
+
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount > 0) {
+    const range = sel.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    if (rect && (rect.top !== 0 || rect.bottom !== 0)) {
+      return rect;
+    }
+    const rects = range.getClientRects();
+    if (rects.length > 0 && (rects[0].top !== 0 || rects[0].bottom !== 0)) {
+      return rects[0];
+    }
+    const container = range.startContainer.nodeType === Node.ELEMENT_NODE
+      ? range.startContainer
+      : range.startContainer.parentElement;
+    if (container && container.getBoundingClientRect) {
+      return container.getBoundingClientRect();
+    }
+  }
+  return null;
+}
+
+// Typewriter / Bottom-screen scrolling (ensures active typing stays in comfortable upper view)
+function handleTypewriterScroll() {
+  requestAnimationFrame(() => {
+    const rect = getCaretRect();
+    if (!rect) return;
+
+    // Use visualViewport if on iPad/mobile to properly account for virtual keyboard
+    const vpHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    // Keep cursor in upper 45% of visible screen so ample breathing space (55%+) remains below
+    const comfortBottom = vpHeight * 0.45;
+
+    if (rect.bottom > comfortBottom) {
+      const scrollNeeded = rect.bottom - comfortBottom;
+      window.scrollBy({
+        top: scrollNeeded,
+        behavior: 'instant'
+      });
+    }
+  });
 }
 
 // Active link popover state
@@ -143,10 +210,17 @@ const { get } = useEditor((root) =>
     .config((ctx) => {
       ctx.set(rootCtx, root);
       ctx.set(defaultValueCtx, props.initialContent);
+      ctx.update(editorViewOptionsCtx, (prev) => ({
+        ...prev,
+        scrollThreshold: 250,
+        scrollMargin: 320,
+      }));
     })
     .use(commonmark)
     .use(inlineLinkInputRule)
     .use(autoLinkInputRule)
+    .use(customHrInputRule)
+    .use(emDashInputRule)
     .use(history)
     .use(listener)
     .config((ctx) => {
@@ -180,11 +254,9 @@ function focus(atStart = true) {
     editor.action((ctx) => {
       const view = ctx.get(editorViewCtx);
       view.focus();
-      if (atStart) {
-        const { state, dispatch } = view;
-        const sel = Selection.atStart(state.doc);
-        dispatch(state.tr.setSelection(sel).scrollIntoView());
-      }
+      const { state, dispatch } = view;
+      const sel = atStart ? Selection.atStart(state.doc) : Selection.atEnd(state.doc);
+      dispatch(state.tr.setSelection(sel).scrollIntoView());
     });
   } catch (e) {
     document.querySelector('.milkdown .editor')?.focus();
@@ -195,7 +267,13 @@ defineExpose({ setContent, focus });
 </script>
 
 <template>
-  <div class="milkdown-wrapper" @click="handleEditorClick" @keyup="handleTypewriterScroll">
+  <div
+    class="milkdown-wrapper"
+    @click="handleEditorClick"
+    @input="handleTypewriterScroll"
+    @keydown="handleTypewriterScroll"
+    @keyup="handleTypewriterScroll"
+  >
     <Milkdown />
 
     <!-- Interactive Floating Link Tooltip -->
@@ -239,8 +317,7 @@ defineExpose({ setContent, focus });
 }
 
 .milkdown-wrapper .milkdown {
-  min-height: calc(100vh - 220px);
-  padding: 1.5rem 0 50vh 0; /* 50vh bottom padding so last line can always scroll to middle */
+  min-height: calc(100vh - 180px);
   outline: none;
 }
 
@@ -250,6 +327,13 @@ defineExpose({ setContent, focus });
   font-size: 1.125rem;
   line-height: 1.85;
   color: var(--text-main);
+  min-height: 80vh;
+  padding: 1.5rem 0 70vh 0 !important; /* Generous 70vh cushion directly in the contenteditable area! */
+  box-sizing: border-box;
+}
+
+.milkdown-wrapper .milkdown .editor > * {
+  scroll-margin-bottom: 45vh;
 }
 
 .milkdown-wrapper .milkdown h1 {

@@ -45,6 +45,16 @@ function focusBodyEditor() {
   }
 }
 
+function handleMainAreaClick(e) {
+  if (e.target.classList.contains('main-writing-area')) {
+    if (isSourceMode.value) {
+      sourceEditorRef.value?.focus(false);
+    } else {
+      editorRef.value?.focus(false);
+    }
+  }
+}
+
 // Security & Lock State
 const isUnlocked = ref(isSessionUnlocked());
 
@@ -454,10 +464,9 @@ function handleGlobalKeydown(e) {
     e.preventDefault();
     isSourceMode.value = !isSourceMode.value;
   }
-  // Lock CMS shortcut: Cmd+Ctrl+L (iPadOS/macOS) or Win+Ctrl+L (Windows)
+  // Lock CMS shortcut: Win+Shift+L (Windows) or Cmd+Shift+L (iPadOS/macOS)
   if (
-    (e.metaKey && e.ctrlKey && (e.key.toLowerCase() === 'l' || e.code === 'KeyL')) ||
-    ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key.toLowerCase() === 'l' || e.code === 'KeyL'))
+    (e.metaKey || e.ctrlKey) && e.shiftKey && (e.key.toLowerCase() === 'l' || e.code === 'KeyL')
   ) {
     e.preventDefault();
     handleLockApp();
@@ -536,7 +545,7 @@ watch(isSourceMode, (newVal) => {
     />
 
     <!-- Main Content / Writing Canvas -->
-    <main class="main-writing-area">
+    <main class="main-writing-area" @click="handleMainAreaClick">
       <!-- Document Header (H1 Title & H2 Subheader) -->
       <div class="document-header">
         <input
