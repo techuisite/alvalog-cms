@@ -122,6 +122,14 @@ function handleSave() {
   emit('configSaved');
   emit('close');
 }
+
+function handleClearCache() {
+  if (window.__clearCMSCacheAndReload) {
+    window.__clearCMSCacheAndReload();
+  } else {
+    window.location.reload();
+  }
+}
 </script>
 
 <template>
@@ -293,6 +301,20 @@ function handleSave() {
           <div v-if="securityFeedback" class="security-feedback">
             {{ securityFeedback }}
           </div>
+        </div>
+
+        <!-- App Updates & PWA Cache Management -->
+        <div class="form-group security-card">
+          <div class="security-card-header">
+            <span class="security-card-title">PWA Version & Cache</span>
+            <span class="version-badge">v1.3.0</span>
+          </div>
+          <p class="security-desc">
+            If updates to the CMS don't immediately appear on your iPad or PC due to browser service worker caching, tap below to clear cache and load the latest build.
+          </p>
+          <button type="button" class="btn-secondary btn-full" @click="handleClearCache">
+            Force Update & Clear App Cache
+          </button>
         </div>
       </div>
 
@@ -525,6 +547,22 @@ function handleSave() {
 }
 
 .mt-2 { margin-top: 0.5rem; }
+
+.btn-full {
+  width: 100%;
+  margin-top: 0.75rem;
+  justify-content: center;
+}
+
+.version-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent);
+  letter-spacing: 0.05em;
+}
 
 .modal-footer {
   padding: 1rem 1.5rem;

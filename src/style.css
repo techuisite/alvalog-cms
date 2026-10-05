@@ -41,7 +41,6 @@ html, body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow-x: hidden;
 }
 
 /* App container */
@@ -49,6 +48,7 @@ html, body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow-x: clip;
 }
 
 .main-writing-area {
@@ -58,6 +58,93 @@ html, body {
   margin: 0 auto;
   padding: 2.5rem 1.5rem 70vh 1.5rem;
   box-sizing: border-box;
+}
+
+/* Restored Draft Banner */
+.restored-draft-banner {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  padding: 0.65rem 1rem;
+  margin-bottom: 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.85rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.banner-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.banner-badge {
+  font-weight: 600;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent);
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+}
+
+.banner-text {
+  color: var(--text-main);
+}
+
+.banner-filename {
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  margin-left: 0.25rem;
+}
+
+.banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.banner-btn {
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-main);
+  transition: all 0.15s ease;
+}
+
+.banner-btn:hover {
+  background: var(--chip-bg);
+}
+
+.banner-btn-new {
+  color: var(--accent);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.banner-btn-new:hover {
+  background: rgba(59, 130, 246, 0.15);
+}
+
+.banner-btn-dismiss {
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  padding: 0.2rem 0.4rem;
+}
+
+.banner-btn-dismiss:hover {
+  color: var(--text-main);
 }
 
 /* Document Header (H1 Title & H2 Subtitle) */
@@ -125,6 +212,26 @@ html, body {
   display: flex;
   align-items: center;
   gap: 1rem;
+}
+
+.active-file-indicator {
+  color: var(--accent);
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 500;
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.version-tag {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--chip-bg);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
 }
 
 

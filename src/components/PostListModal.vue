@@ -167,6 +167,7 @@ function onDeleteDraft(item) {
           <div class="post-item-main">
             <div class="title-row">
               <span v-if="activeTab === 'drafts'" class="draft-pill-sm">Draft</span>
+              <span v-if="currentFilename === post.name" class="active-pill-sm">Open Now</span>
               <h4 class="post-item-title">{{ post.frontmatter?.title || post.name }}</h4>
             </div>
             <div class="post-item-meta">
@@ -387,6 +388,17 @@ function onDeleteDraft(item) {
   border-radius: 4px;
   background: rgba(56, 189, 248, 0.15);
   color: #38bdf8;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.active-pill-sm {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(34, 197, 94, 0.18);
+  color: #22c55e;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }

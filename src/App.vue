@@ -83,8 +83,9 @@ const showSettingsModal = ref(false);
 // Drafts & Metrics
 const { isDirty, lastSavedAt, saveLocalDraft, getLocalDraft, clearLocalDraft, calculateWordCount, calculateReadingTime } = useDrafts();
 
-// Current Document
-const frontmatter = ref({
+// Synchronously restore saved local draft immediately on startup
+const initialDraft = getLocalDraft();
+const frontmatter = ref(initialDraft?.frontmatter || {
   title: '',
   description: '',
   pubDate: new Date().toISOString(),
@@ -93,11 +94,23 @@ const frontmatter = ref({
   tags: [],
   featured: false
 });
-const slug = ref('');
-const markdownContent = ref('');
-const currentSha = ref(null);
-const currentFilename = ref(null);
-const currentType = ref('new'); // 'new' | 'draft' | 'published'
+const slug = ref(initialDraft?.slug || '');
+const markdownContent = ref(initialDraft?.markdown || '');
+const currentSha = ref(initialDraft?.currentSha || null);
+const currentFilename = ref(initialDraft?.currentFilename || null);
+const currentType = ref(initialDraft?.currentType || (initialDraft?.currentSha ? 'published' : 'new'));
+
+if (initialDraft && (initialDraft.markdown || initialDraft.frontmatter?.title)) {
+  isDirty.value = true;
+}
+
+const restoredDraftBanner = ref(initialDraft && (initialDraft.markdown || initialDraft.frontmatter?.title) ? {
+  filename: initialDraft.currentFilename,
+  title: initialDraft.frontmatter?.title || 'Untitled',
+  savedAt: initialDraft.savedAt ? new Date(initialDraft.savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null,
+  isPublished: initialDraft.currentType === 'published',
+  isDraft: initialDraft.currentType === 'draft'
+} : null);
 
 const isDraft = computed(() => currentType.value === 'draft');
 const isPublished = computed(() => currentType.value === 'published');
@@ -165,6 +178,7 @@ function createNewPost(confirmIfDirty = true) {
   currentFilename.value = null;
   currentType.value = 'new';
   isDirty.value = false;
+  restoredDraftBanner.value = null;
   clearLocalDraft();
 
   editorRef.value?.setContent('');
@@ -191,6 +205,7 @@ async function loadPost(item, type = 'published') {
     currentFilename.value = name;
     currentType.value = type;
     isDirty.value = false;
+    restoredDraftBanner.value = null;
 
     // Load content into editor
     editorRef.value?.setContent(parsed.content);
@@ -477,16 +492,11 @@ onMounted(() => {
   document.body.className = isDark.value ? 'dark' : 'light';
   window.addEventListener('keydown', handleGlobalKeydown);
 
-  // Restore local draft if exists
-  const draft = getLocalDraft();
-  if (draft && draft.markdown) {
-    frontmatter.value = draft.frontmatter || frontmatter.value;
-    slug.value = draft.slug || '';
-    markdownContent.value = draft.markdown;
-    currentSha.value = draft.currentSha || null;
-    currentFilename.value = draft.currentFilename || null;
-    currentType.value = draft.currentType || (currentSha.value ? 'published' : 'new');
-    isDirty.value = true;
+  // Synchronize editor content if draft was present
+  if (markdownContent.value) {
+    nextTick(() => {
+      editorRef.value?.setContent(markdownContent.value);
+    });
   }
 
   // Load posts if token is present
@@ -546,6 +556,27 @@ watch(isSourceMode, (newVal) => {
 
     <!-- Main Content / Writing Canvas -->
     <main class="main-writing-area" @click="handleMainAreaClick">
+      <!-- Restored Draft Banner -->
+      <div v-if="restoredDraftBanner" class="restored-draft-banner">
+        <div class="banner-info">
+          <span class="banner-badge">
+            {{ restoredDraftBanner.isPublished ? 'Live Post Session' : (restoredDraftBanner.isDraft ? 'Cloud Draft Session' : 'Unsaved Local Draft') }}
+          </span>
+          <span class="banner-text">
+            Restored from {{ restoredDraftBanner.savedAt ? restoredDraftBanner.savedAt : 'previous session' }}
+            <span v-if="restoredDraftBanner.filename" class="banner-filename">({{ restoredDraftBanner.filename }})</span>
+          </span>
+        </div>
+        <div class="banner-actions">
+          <button class="banner-btn banner-btn-new" @click="createNewPost(true)" title="Discard this session and start fresh">
+            New Post
+          </button>
+          <button class="banner-btn banner-btn-dismiss" @click="restoredDraftBanner = null" title="Dismiss notice">
+            ✕
+          </button>
+        </div>
+      </div>
+
       <!-- Document Header (H1 Title & H2 Subheader) -->
       <div class="document-header">
         <input
@@ -588,11 +619,14 @@ watch(isSourceMode, (newVal) => {
       <div class="status-left">
         <span>Words: {{ calculateWordCount(markdownContent) }}</span>
         <span>{{ calculateReadingTime(markdownContent) }}</span>
-        <span v-if="slug" class="hide-mobile">Slug: /posts/{{ slug }}</span>
+        <span v-if="currentFilename" class="active-file-indicator">
+          📄 {{ currentFilename }}
+        </span>
+        <span v-else-if="slug" class="hide-mobile">Slug: /posts/{{ slug }}</span>
       </div>
       <div class="status-right">
         <span>{{ isSourceMode ? 'Markdown Source Mode' : 'WYSIWYG Mode' }}</span>
-        <span class="hide-mobile">Ctrl+/ to switch</span>
+        <span class="version-tag">v1.3.0</span>
       </div>
     </footer>
 

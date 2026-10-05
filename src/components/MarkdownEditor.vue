@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { Milkdown, useEditor } from '@milkdown/vue';
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx } from '@milkdown/core';
 import { commonmark, linkSchema, hrSchema } from '@milkdown/preset-commonmark';
@@ -14,6 +14,9 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update']);
+
+let isInitialized = false;
+let currentInternalMarkdown = props.initialContent || '';
 
 // Input rule: Auto-format [text](url) to styled link mark
 const inlineLinkInputRule = $inputRule((ctx) => {
@@ -197,12 +200,21 @@ function onWindowClick(e) {
   }
 }
 
+function onSelectionChange() {
+  const active = document.activeElement;
+  if (active && active.closest('.milkdown')) {
+    handleTypewriterScroll();
+  }
+}
+
 onMounted(() => {
   window.addEventListener('click', onWindowClick);
+  document.addEventListener('selectionchange', onSelectionChange);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('click', onWindowClick);
+  document.removeEventListener('selectionchange', onSelectionChange);
 });
 
 const { get } = useEditor((root) =>
@@ -230,6 +242,15 @@ const { get } = useEditor((root) =>
           .replace(/\\\]/g, ']')
           .replace(/\\\(/g, '(')
           .replace(/\\\)/g, ')');
+        
+        currentInternalMarkdown = unescaped;
+
+        // Skip the initial mount update so it never wipes saved drafts or emits false dirty
+        if (!isInitialized) {
+          isInitialized = true;
+          return;
+        }
+
         emit('update', unescaped);
         handleTypewriterScroll();
       });
@@ -238,11 +259,22 @@ const { get } = useEditor((root) =>
 
 function setContent(markdown) {
   try {
-    get()?.action(replaceAll(markdown));
+    currentInternalMarkdown = markdown || '';
+    isInitialized = false;
+    get()?.action(replaceAll(markdown || ''));
+    setTimeout(() => {
+      isInitialized = true;
+    }, 80);
   } catch (e) {
     console.warn('Error updating Milkdown content:', e);
   }
 }
+
+watch(() => props.initialContent, (newVal) => {
+  if (newVal !== undefined && newVal !== currentInternalMarkdown) {
+    setContent(newVal);
+  }
+});
 
 function focus(atStart = true) {
   try {
