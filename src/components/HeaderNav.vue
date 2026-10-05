@@ -163,8 +163,9 @@ const emit = defineEmits([
 
 <style scoped>
 .app-header {
-  min-height: calc(56px + env(safe-area-inset-top, 0px));
-  padding-top: env(safe-area-inset-top, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+  min-height: calc(56px + var(--safe-top));
+  padding-top: var(--safe-top);
   box-sizing: border-box;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border);
@@ -177,8 +178,12 @@ const emit = defineEmits([
   top: 0;
   z-index: 40;
   user-select: none;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
+}
+
+@media all and (display-mode: standalone) {
+  .app-header {
+    --safe-top: max(32px, env(safe-area-inset-top, 0px));
+  }
 }
 
 .header-left, .header-right {
