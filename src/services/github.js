@@ -12,7 +12,10 @@ const STORAGE_KEYS = {
 const DEFAULT_REPO = 'techuisite/techuisite.github.io';
 const DEFAULT_BRANCH = 'main';
 const POSTS_PATH = 'src/content/blog';
+const DRAFTS_PATH = 'src/content/drafts';
 const IMAGES_BASE_PATH = 'public/content/images';
+
+export { POSTS_PATH, DRAFTS_PATH, IMAGES_BASE_PATH };
 
 export function getGithubConfig() {
   return {
@@ -117,6 +120,20 @@ export async function fetchPostFilesList() {
   return items.filter(item => item.type === 'file' && item.name.endsWith('.md'));
 }
 
+export async function fetchDraftFilesList() {
+  const cfg = getGithubConfig();
+  if (!cfg.token) throw new Error('GitHub token not configured.');
+
+  const url = `https://api.github.com/repos/${cfg.repo}/contents/${DRAFTS_PATH}?ref=${cfg.branch}`;
+  const res = await fetch(url, { headers: getHeaders(cfg.token) });
+  if (!res.ok) {
+    if (res.status === 404) return [];
+    throw new Error(`Failed to load drafts list (status ${res.status}).`);
+  }
+  const items = await res.json();
+  return items.filter(item => item.type === 'file' && item.name.endsWith('.md'));
+}
+
 export async function fetchPostContent(filePath) {
   const cfg = getGithubConfig();
   if (!cfg.token) throw new Error('GitHub token not configured.');
@@ -195,6 +212,69 @@ export async function deletePostFromGithub({ filename, sha, commitMessage = null
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.message || `Failed to delete post (status ${res.status}).`);
+  }
+
+  return await res.json();
+}
+
+export async function saveDraftToGithub({ filename, contentString, sha = null, commitMessage = null }) {
+  const cfg = getGithubConfig();
+  if (!cfg.token) throw new Error('GitHub token not configured.');
+
+  const path = `${DRAFTS_PATH}/${filename}`;
+  const url = `https://api.github.com/repos/${cfg.repo}/contents/${path}`;
+  
+  const payload = {
+    message: commitMessage || (sha ? `Update draft: ${filename}` : `Save draft: ${filename}`),
+    content: utf8ToBase64(contentString),
+    branch: cfg.branch,
+  };
+
+  if (sha) {
+    payload.sha = sha;
+  }
+
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: getHeaders(cfg.token),
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `Failed to save draft (status ${res.status}).`);
+  }
+
+  const result = await res.json();
+  return {
+    sha: result.content.sha,
+    path: result.content.path,
+    commit: result.commit
+  };
+}
+
+export async function deleteDraftFromGithub({ filename, sha, commitMessage = null }) {
+  const cfg = getGithubConfig();
+  if (!cfg.token) throw new Error('GitHub token not configured.');
+
+  const path = `${DRAFTS_PATH}/${filename}`;
+  const url = `https://api.github.com/repos/${cfg.repo}/contents/${path}`;
+
+  const payload = {
+    message: commitMessage || `Delete draft: ${filename}`,
+    sha: sha,
+    branch: cfg.branch,
+  };
+
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: getHeaders(cfg.token),
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `Failed to delete draft (status ${res.status}).`);
   }
 
   return await res.json();

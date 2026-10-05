@@ -2,8 +2,10 @@
 const props = defineProps({
   postTitle: { type: String, default: '' },
   isPublished: { type: Boolean, default: false },
+  isDraft: { type: Boolean, default: false },
   isDirty: { type: Boolean, default: false },
   isSaving: { type: Boolean, default: false },
+  isSavingDraft: { type: Boolean, default: false },
   isSourceMode: { type: Boolean, default: false },
   isDark: { type: Boolean, default: true },
   hasToken: { type: Boolean, default: false },
@@ -16,6 +18,7 @@ const emit = defineEmits([
   'toggleTheme',
   'openSettings',
   'openImageUpload',
+  'saveDraft',
   'publishPost',
   'newPost',
   'lockApp'
@@ -30,7 +33,7 @@ const emit = defineEmits([
         <span class="cms-badge">CMS</span>
       </div>
 
-      <button class="nav-btn" @click="emit('togglePosts')" title="Browse all posts">
+      <button class="nav-btn" @click="emit('togglePosts')" title="Browse all posts and drafts">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="8" y1="6" x2="21" y2="6"></line>
           <line x1="8" y1="12" x2="21" y2="12"></line>
@@ -60,11 +63,20 @@ const emit = defineEmits([
         class="status-pill"
         :class="{
           'status-published': isPublished && !isDirty,
-          'status-modified': isPublished && isDirty,
-          'status-draft': !isPublished
+          'status-draft-synced': isDraft && !isDirty,
+          'status-modified': (isPublished || isDraft) && isDirty,
+          'status-local-draft': !isPublished && !isDraft
         }"
       >
-        {{ isSaving ? 'Saving...' : isPublished ? (isDirty ? 'Modified' : 'Published') : 'Local Draft' }}
+        {{
+          (isSaving || isSavingDraft)
+            ? 'Saving...'
+            : isPublished
+              ? (isDirty ? 'Published (Modified)' : 'Published')
+              : isDraft
+                ? (isDirty ? 'Draft (Unsaved)' : 'Draft (Cloud)')
+                : (isDirty ? 'Local Draft' : 'New Post')
+        }}
       </span>
     </div>
 
@@ -145,11 +157,27 @@ const emit = defineEmits([
         </svg>
       </button>
 
+      <!-- Save Draft Button -->
+      <button
+        class="draft-btn"
+        :disabled="isSaving || isSavingDraft"
+        @click="emit('saveDraft')"
+        title="Save draft to Cloud (safe from publishing to alvalog.net)"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+          <polyline points="17 21 17 13 7 13 7 21"></polyline>
+          <polyline points="7 3 7 8 15 8"></polyline>
+        </svg>
+        <span class="hide-tablet">{{ isSavingDraft ? 'Saving...' : 'Save Draft' }}</span>
+      </button>
+
       <!-- Publish / Update Button -->
       <button
         class="publish-btn"
-        :disabled="isSaving"
+        :disabled="isSaving || isSavingDraft"
         @click="emit('publishPost')"
+        :title="isPublished ? 'Update live blog post' : 'Publish post live to alvalog.net'"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -250,12 +278,17 @@ const emit = defineEmits([
   color: #22c55e;
 }
 
+.status-draft-synced {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+}
+
 .status-modified {
   background: rgba(245, 158, 11, 0.15);
   color: #f59e0b;
 }
 
-.status-draft {
+.status-draft, .status-local-draft {
   background: rgba(148, 163, 184, 0.15);
   color: #94a3b8;
 }
@@ -322,6 +355,37 @@ const emit = defineEmits([
   height: 7px;
   background: #f59e0b;
   border-radius: 50%;
+}
+
+.draft-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--chip-bg);
+  border: 1px solid var(--border);
+  color: var(--text-heading);
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.draft-btn:hover {
+  background: var(--border);
+  border-color: var(--text-muted);
+}
+
+.draft-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.draft-btn svg {
+  width: 14px;
+  height: 14px;
+  color: #38bdf8;
 }
 
 .publish-btn {

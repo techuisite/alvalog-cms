@@ -1,20 +1,41 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 
 const props = defineProps({
   isOpen: { type: Boolean, default: false },
-  posts: { type: Array, default: () => [] },
+  publishedPosts: { type: Array, default: () => [] },
+  draftPosts: { type: Array, default: () => [] },
   isLoading: { type: Boolean, default: false },
-  currentFilename: { type: String, default: '' }
+  currentFilename: { type: String, default: '' },
+  currentType: { type: String, default: 'new' }
 });
 
-const emit = defineEmits(['close', 'selectPost', 'createNew', 'refreshPosts']);
+const emit = defineEmits(['close', 'selectPost', 'deleteDraft', 'createNew', 'refreshPosts']);
+
+const activeTab = ref('published');
 const searchQuery = ref('');
 
+// Auto-select tab when modal opens
+watch(() => props.isOpen, (open) => {
+  if (open) {
+    searchQuery.value = '';
+    if (props.currentType === 'draft' || (props.draftPosts.length > 0 && props.publishedPosts.length === 0)) {
+      activeTab.value = 'drafts';
+    } else {
+      activeTab.value = 'published';
+    }
+  }
+});
+
+const currentList = computed(() => {
+  return activeTab.value === 'drafts' ? props.draftPosts : props.publishedPosts;
+});
+
 const filteredPosts = computed(() => {
-  if (!searchQuery.value.trim()) return props.posts;
+  const list = currentList.value;
+  if (!searchQuery.value.trim()) return list;
   const q = searchQuery.value.toLowerCase();
-  return props.posts.filter(p => {
+  return list.filter(p => {
     const titleMatch = (p.frontmatter?.title || '').toLowerCase().includes(q);
     const slugMatch = (p.name || '').toLowerCase().includes(q);
     const tagMatch = (p.frontmatter?.tags || []).some(t => t.toLowerCase().includes(q));
@@ -31,18 +52,29 @@ function formatDate(dateStr) {
     return dateStr;
   }
 }
+
+function handleSelect(item) {
+  emit('selectPost', item, activeTab.value === 'drafts' ? 'draft' : 'published');
+}
+
+function onDeleteDraft(item) {
+  const title = item.frontmatter?.title || item.name;
+  if (window.confirm(`Delete cloud draft "${title}"?\nThis cannot be undone.`)) {
+    emit('deleteDraft', item);
+  }
+}
 </script>
 
 <template>
   <div v-if="isOpen" class="modal-backdrop" @click="emit('close')">
     <div class="modal-panel" @click.stop>
+      <!-- Header -->
       <div class="modal-header">
         <div class="header-left">
-          <h3>Your Blog Posts</h3>
-          <span class="count-badge">{{ posts.length }}</span>
+          <h3>Your Posts & Drafts</h3>
         </div>
         <div class="header-actions">
-          <button class="btn-secondary sm" :disabled="isLoading" @click="emit('refreshPosts')" title="Reload posts">
+          <button class="btn-secondary sm" :disabled="isLoading" @click="emit('refreshPosts')" title="Reload posts & drafts">
             <svg class="refresh-icon" :class="{ spinning: isLoading }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="23 4 23 10 17 10"></polyline>
               <polyline points="1 20 1 14 7 14"></polyline>
@@ -62,6 +94,37 @@ function formatDate(dateStr) {
         </div>
       </div>
 
+      <!-- Tab Switcher: Drafts vs Published -->
+      <div class="tabs-bar">
+        <button
+          class="tab-btn"
+          :class="{ active: activeTab === 'drafts' }"
+          @click="activeTab = 'drafts'"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+            <polyline points="7 3 7 8 15 8"></polyline>
+          </svg>
+          <span>Cloud Drafts</span>
+          <span class="tab-badge draft-badge">{{ draftPosts.length }}</span>
+        </button>
+
+        <button
+          class="tab-btn"
+          :class="{ active: activeTab === 'published' }"
+          @click="activeTab = 'published'"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+          </svg>
+          <span>Published</span>
+          <span class="tab-badge published-badge">{{ publishedPosts.length }}</span>
+        </button>
+      </div>
+
+      <!-- Search Input -->
       <div class="search-bar">
         <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="11" cy="11" r="8"></circle>
@@ -71,18 +134,26 @@ function formatDate(dateStr) {
           type="text"
           v-model="searchQuery"
           class="search-input"
-          placeholder="Search by title, tag, or filename..."
+          :placeholder="activeTab === 'drafts' ? 'Search cloud drafts...' : 'Search published posts...'"
         />
       </div>
 
+      <!-- List Items -->
       <div class="post-list">
         <div v-if="isLoading" class="loading-state">
           <div class="spinner"></div>
-          <p>Loading posts from GitHub...</p>
+          <p>Loading from GitHub...</p>
         </div>
 
         <div v-else-if="filteredPosts.length === 0" class="empty-state">
-          <p>No posts found matching your search.</p>
+          <template v-if="activeTab === 'drafts'">
+            <div class="empty-icon">📝</div>
+            <p class="empty-title">No cloud drafts in progress</p>
+            <p class="empty-hint">Click <strong>Save Draft</strong> while writing to sync your posts securely across all your devices without publishing live.</p>
+          </template>
+          <template v-else>
+            <p>No published posts found matching your search.</p>
+          </template>
         </div>
 
         <div
@@ -91,20 +162,41 @@ function formatDate(dateStr) {
           :key="post.name"
           class="post-item"
           :class="{ active: currentFilename === post.name }"
-          @click="emit('selectPost', post)"
+          @click="handleSelect(post)"
         >
           <div class="post-item-main">
-            <h4 class="post-item-title">{{ post.frontmatter?.title || post.name }}</h4>
+            <div class="title-row">
+              <span v-if="activeTab === 'drafts'" class="draft-pill-sm">Draft</span>
+              <h4 class="post-item-title">{{ post.frontmatter?.title || post.name }}</h4>
+            </div>
             <div class="post-item-meta">
-              <span class="meta-date">{{ formatDate(post.frontmatter?.pubDate) }}</span>
+              <span class="meta-date">
+                {{ formatDate(post.frontmatter?.updatedDate || post.frontmatter?.pubDate) }}
+              </span>
               <span class="meta-dot">&bull;</span>
               <span class="meta-slug">{{ post.name }}</span>
             </div>
           </div>
-          <div v-if="post.frontmatter?.tags?.length" class="post-item-tags">
-            <span v-for="tag in post.frontmatter.tags.slice(0, 3)" :key="tag" class="small-tag">
-              {{ tag }}
-            </span>
+
+          <div class="post-item-right">
+            <div v-if="post.frontmatter?.tags?.length" class="post-item-tags hide-mobile">
+              <span v-for="tag in post.frontmatter.tags.slice(0, 3)" :key="tag" class="small-tag">
+                {{ tag }}
+              </span>
+            </div>
+
+            <!-- Delete Draft button (Drafts tab only) -->
+            <button
+              v-if="activeTab === 'drafts'"
+              class="delete-item-btn"
+              @click.stop="onDeleteDraft(post)"
+              title="Delete draft"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+            </button>
           </div>
         </div>
       </div>
@@ -127,8 +219,8 @@ function formatDate(dateStr) {
 
 .modal-panel {
   width: 100%;
-  max-width: 600px;
-  max-height: 80vh;
+  max-width: 620px;
+  max-height: 82vh;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -139,7 +231,7 @@ function formatDate(dateStr) {
 }
 
 .modal-header {
-  padding: 1.25rem 1.5rem;
+  padding: 1rem 1.25rem;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -159,23 +251,71 @@ function formatDate(dateStr) {
   color: var(--text-heading);
 }
 
-.count-badge {
-  background: var(--chip-bg);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  padding: 0.15rem 0.5rem;
-  border-radius: 12px;
-}
-
 .header-actions {
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
+/* Tabs Bar */
+.tabs-bar {
+  display: flex;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 1rem;
+  gap: 0.5rem;
+}
+
+.tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 0.95rem;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tab-btn:hover {
+  color: var(--text-heading);
+}
+
+.tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.tab-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.tab-badge {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 10px;
+  background: var(--chip-bg);
+  color: var(--text-muted);
+}
+
+.tab-btn.active .tab-badge.draft-badge {
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+}
+
+.tab-btn.active .tab-badge.published-badge {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+}
+
 .search-bar {
-  padding: 0.75rem 1.5rem;
+  padding: 0.75rem 1.25rem;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -195,13 +335,14 @@ function formatDate(dateStr) {
   background: transparent;
   color: var(--text-main);
   outline: none;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
 }
 
 .post-list {
   flex: 1;
   overflow-y: auto;
   padding: 0.75rem;
+  min-height: 240px;
 }
 
 .post-item {
@@ -213,6 +354,7 @@ function formatDate(dateStr) {
   cursor: pointer;
   transition: background 0.15s ease;
   border: 1px solid transparent;
+  margin-bottom: 0.25rem;
 }
 
 .post-item:hover {
@@ -227,8 +369,26 @@ function formatDate(dateStr) {
 .post-item-main {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.25rem;
   min-width: 0;
+  flex: 1;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.draft-pill-sm {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .post-item-title {
@@ -251,6 +411,15 @@ function formatDate(dateStr) {
 
 .meta-slug {
   font-family: 'JetBrains Mono', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.post-item-right {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .post-item-tags {
@@ -268,10 +437,53 @@ function formatDate(dateStr) {
   white-space: nowrap;
 }
 
+.delete-item-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 0.45rem;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.delete-item-btn:hover {
+  opacity: 1;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.delete-item-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
 .loading-state, .empty-state {
   padding: 3rem 1.5rem;
   text-align: center;
   color: var(--text-muted);
+}
+
+.empty-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.empty-title {
+  font-weight: 600;
+  color: var(--text-heading);
+  margin-bottom: 0.35rem;
+}
+
+.empty-hint {
+  font-size: 0.85rem;
+  line-height: 1.4;
+  max-width: 360px;
+  margin: 0 auto;
 }
 
 .spinner {
@@ -301,8 +513,48 @@ function formatDate(dateStr) {
   gap: 0.4rem;
 }
 
+.btn-secondary {
+  background: var(--chip-bg);
+  border: 1px solid var(--border);
+  color: var(--text-heading);
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-icon {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.35rem;
+  border-radius: 6px;
+}
+
+.btn-icon:hover {
+  background: var(--chip-bg);
+  color: var(--text-heading);
+}
+
+.btn-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
 .refresh-icon {
   width: 14px;
   height: 14px;
+}
+
+@media (max-width: 600px) {
+  .hide-mobile {
+    display: none;
+  }
 }
 </style>

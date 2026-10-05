@@ -14,8 +14,11 @@ import { isSessionUnlocked, lockSession, isSecuritySetup } from './services/auth
 import {
   getGithubConfig,
   fetchPostFilesList,
+  fetchDraftFilesList,
   fetchPostContent,
   savePostToGithub,
+  saveDraftToGithub,
+  deleteDraftFromGithub,
   testConnection
 } from './services/github.js';
 import { parsePost, serializePost, slugify } from './utils/frontmatter.js';
@@ -26,6 +29,7 @@ const editorRef = ref(null);
 const isSourceMode = ref(false);
 const isDark = ref(localStorage.getItem('alvalog_theme') !== 'light');
 const isSaving = ref(false);
+const isSavingDraft = ref(false);
 
 // Security & Lock State
 const isUnlocked = ref(isSessionUnlocked());
@@ -69,10 +73,14 @@ const slug = ref('');
 const markdownContent = ref('');
 const currentSha = ref(null);
 const currentFilename = ref(null);
-const isPublished = computed(() => !!currentSha.value);
+const currentType = ref('new'); // 'new' | 'draft' | 'published'
 
-// Posts Repository Cache
-const posts = ref([]);
+const isDraft = computed(() => currentType.value === 'draft');
+const isPublished = computed(() => currentType.value === 'published');
+
+// Posts & Drafts Repository Cache
+const publishedPosts = ref([]);
+const draftPosts = ref([]);
 const isLoadingPosts = ref(false);
 const knownTags = ref([]);
 const githubConfig = ref(getGithubConfig());
@@ -100,7 +108,8 @@ function markAsDirty() {
     slug: slug.value,
     markdown: markdownContent.value,
     currentSha: currentSha.value,
-    currentFilename: currentFilename.value
+    currentFilename: currentFilename.value,
+    currentType: currentType.value
   });
 }
 
@@ -125,6 +134,7 @@ function createNewPost(confirmIfDirty = true) {
   markdownContent.value = '';
   currentSha.value = null;
   currentFilename.value = null;
+  currentType.value = 'new';
   isDirty.value = false;
   clearLocalDraft();
 
@@ -132,11 +142,17 @@ function createNewPost(confirmIfDirty = true) {
   showPostsModal.value = false;
 }
 
-// ── Load Existing Post from GitHub ────────────────────────
-async function loadPost(postItem) {
+// ── Load Existing Post or Draft from GitHub ───────────────
+async function loadPost(item, type = 'published') {
+  if (isDirty.value) {
+    if (!window.confirm('You have unsaved changes in the editor. Discard and load this document?')) {
+      return;
+    }
+  }
+
   try {
     isLoadingPosts.value = true;
-    const { sha, rawText, name } = await fetchPostContent(postItem.path);
+    const { sha, rawText, name } = await fetchPostContent(item.path);
     const parsed = parsePost(rawText);
 
     frontmatter.value = parsed.frontmatter;
@@ -144,33 +160,34 @@ async function loadPost(postItem) {
     markdownContent.value = parsed.content;
     currentSha.value = sha;
     currentFilename.value = name;
+    currentType.value = type;
     isDirty.value = false;
 
     // Load content into editor
     editorRef.value?.setContent(parsed.content);
     showPostsModal.value = false;
 
-    // Clear draft of previous post
+    // Clear local draft of previous post
     clearLocalDraft();
   } catch (err) {
-    alert(`Error loading post: ${err.message}`);
+    alert(`Error loading document: ${err.message}`);
   } finally {
     isLoadingPosts.value = false;
   }
 }
 
-// ── Refresh Posts List ─────────────────────────────────────
+// ── Refresh Posts & Drafts Lists from GitHub ──────────────
 async function refreshPostsList() {
   if (!hasToken.value) return;
   isLoadingPosts.value = true;
 
   try {
-    const files = await fetchPostFilesList();
     const tagSet = new Set();
 
-    // Fetch and parse each post's metadata
-    const parsedPosts = await Promise.all(
-      files.map(async (file) => {
+    // 1. Fetch published posts
+    const postFiles = await fetchPostFilesList();
+    const parsedPublished = await Promise.all(
+      postFiles.map(async (file) => {
         try {
           const contentData = await fetchPostContent(file.path);
           const parsed = parsePost(contentData.rawText);
@@ -189,23 +206,125 @@ async function refreshPostsList() {
       })
     );
 
-    // Sort by publication date descending
-    parsedPosts.sort((a, b) => {
+    parsedPublished.sort((a, b) => {
       const dateA = new Date(a.frontmatter?.pubDate || 0).getTime();
       const dateB = new Date(b.frontmatter?.pubDate || 0).getTime();
       return dateB - dateA;
     });
 
-    posts.value = parsedPosts;
+    publishedPosts.value = parsedPublished;
+
+    // 2. Fetch drafts
+    const draftFiles = await fetchDraftFilesList();
+    const parsedDrafts = await Promise.all(
+      draftFiles.map(async (file) => {
+        try {
+          const contentData = await fetchPostContent(file.path);
+          const parsed = parsePost(contentData.rawText);
+          (parsed.frontmatter.tags || []).forEach(t => tagSet.add(t));
+          return {
+            ...file,
+            frontmatter: parsed.frontmatter,
+            sha: contentData.sha
+          };
+        } catch {
+          return {
+            ...file,
+            frontmatter: { title: file.name, pubDate: '', updatedDate: '', tags: [] }
+          };
+        }
+      })
+    );
+
+    parsedDrafts.sort((a, b) => {
+      const dateA = new Date(a.frontmatter?.updatedDate || a.frontmatter?.pubDate || 0).getTime();
+      const dateB = new Date(b.frontmatter?.updatedDate || b.frontmatter?.pubDate || 0).getTime();
+      return dateB - dateA;
+    });
+
+    draftPosts.value = parsedDrafts;
     knownTags.value = Array.from(tagSet);
   } catch (err) {
-    console.warn('Could not refresh posts:', err);
+    console.warn('Could not refresh posts/drafts:', err);
   } finally {
     isLoadingPosts.value = false;
   }
 }
 
-// ── Publish / Save Post to GitHub ─────────────────────────
+// ── Save Draft to GitHub (Does NOT trigger Astro build) ───
+async function saveDraft() {
+  if (!hasToken.value) {
+    showSettingsModal.value = true;
+    return;
+  }
+
+  const title = frontmatter.value.title.trim() || 'Untitled Draft';
+  const postSlug = (slug.value.trim() || slugify(title)) || `draft-${Date.now()}`;
+  const filename = `${postSlug}.md`;
+
+  isSavingDraft.value = true;
+
+  try {
+    frontmatter.value.updatedDate = new Date().toISOString();
+    const finalContent = serializePost(frontmatter.value, markdownContent.value);
+    const commitMsg = isDraft.value
+      ? `Update draft: ${title}`
+      : `Save draft: ${title}`;
+
+    const res = await saveDraftToGithub({
+      filename,
+      contentString: finalContent,
+      sha: isDraft.value ? currentSha.value : null,
+      commitMessage: commitMsg
+    });
+
+    currentSha.value = res.sha;
+    currentFilename.value = filename;
+    slug.value = postSlug;
+    currentType.value = 'draft';
+    isDirty.value = false;
+
+    saveLocalDraft({
+      frontmatter: frontmatter.value,
+      slug: postSlug,
+      markdown: markdownContent.value,
+      currentSha: res.sha,
+      currentFilename: filename,
+      currentType: 'draft'
+    });
+
+    refreshPostsList();
+    alert('☁️ Draft saved to Cloud!\n\nYour work is synced across your devices and will NOT be published to alvalog.net until you click Publish.');
+  } catch (err) {
+    alert(`Failed to save draft: ${err.message}`);
+  } finally {
+    isSavingDraft.value = false;
+  }
+}
+
+// ── Delete Cloud Draft ─────────────────────────────────────
+async function handleDeleteDraft(draftItem) {
+  try {
+    isLoadingPosts.value = true;
+    await deleteDraftFromGithub({
+      filename: draftItem.name,
+      sha: draftItem.sha
+    });
+
+    // If current post was this deleted draft, reset editor
+    if (currentFilename.value === draftItem.name && currentType.value === 'draft') {
+      createNewPost(false);
+    }
+
+    await refreshPostsList();
+  } catch (err) {
+    alert(`Failed to delete draft: ${err.message}`);
+  } finally {
+    isLoadingPosts.value = false;
+  }
+}
+
+// ── Publish Post to GitHub (Triggers live build on alvalog.net) ───
 async function publishPost() {
   if (!hasToken.value) {
     showSettingsModal.value = true;
@@ -221,25 +340,47 @@ async function publishPost() {
   const postSlug = (slug.value.trim() || slugify(title)) || 'untitled';
   const filename = `${postSlug}.md`;
 
+  const isPromotingFromDraft = currentType.value === 'draft';
+  const confirmMsg = isPublished.value
+    ? `Update published post "${title}" on alvalog.net?`
+    : `Publish "${title}" live to alvalog.net?${isPromotingFromDraft ? '\n(This will promote your draft and publish it live).' : ''}`;
+
+  if (!window.confirm(confirmMsg)) {
+    return;
+  }
+
   isSaving.value = true;
 
   try {
-    // If it's a published post and filename changed, warn or use new
     const finalContent = serializePost(frontmatter.value, markdownContent.value);
-    const commitMsg = currentSha.value
+    const commitMsg = isPublished.value
       ? `Update post: ${title}`
       : `Publish: ${title}`;
 
     const res = await savePostToGithub({
       filename,
       contentString: finalContent,
-      sha: currentSha.value,
+      sha: isPublished.value ? currentSha.value : null,
       commitMessage: commitMsg
     });
+
+    // If it was a draft in src/content/drafts/, clean it up now
+    if (isPromotingFromDraft && currentFilename.value && currentSha.value) {
+      try {
+        await deleteDraftFromGithub({
+          filename: currentFilename.value,
+          sha: currentSha.value,
+          commitMessage: `Remove draft (promoted to published): ${title}`
+        });
+      } catch (draftErr) {
+        console.warn('Could not clean up draft after publish:', draftErr);
+      }
+    }
 
     currentSha.value = res.sha;
     currentFilename.value = filename;
     slug.value = postSlug;
+    currentType.value = 'published';
     isDirty.value = false;
     clearLocalDraft();
 
@@ -283,7 +424,11 @@ function handleGlobalKeydown(e) {
   // Save shortcut: Ctrl+S or Cmd+S
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
     e.preventDefault();
-    publishPost();
+    if (currentType.value === 'published') {
+      publishPost();
+    } else {
+      saveDraft();
+    }
   }
   // Source mode shortcut: Ctrl+/ or Cmd+/ (MarkText standard!)
   if ((e.ctrlKey || e.metaKey) && e.key === '/') {
@@ -304,6 +449,7 @@ onMounted(() => {
     markdownContent.value = draft.markdown;
     currentSha.value = draft.currentSha || null;
     currentFilename.value = draft.currentFilename || null;
+    currentType.value = draft.currentType || (currentSha.value ? 'published' : 'new');
     isDirty.value = true;
   }
 
@@ -343,8 +489,10 @@ watch(isSourceMode, (newVal) => {
     <HeaderNav
       :postTitle="frontmatter.title"
       :isPublished="isPublished"
+      :isDraft="isDraft"
       :isDirty="isDirty"
       :isSaving="isSaving"
+      :isSavingDraft="isSavingDraft"
       :isSourceMode="isSourceMode"
       :isDark="isDark"
       :hasToken="hasToken"
@@ -354,6 +502,7 @@ watch(isSourceMode, (newVal) => {
       @toggleTheme="toggleTheme"
       @openSettings="showSettingsModal = true"
       @openImageUpload="showImageModal = true"
+      @saveDraft="saveDraft"
       @publishPost="publishPost"
       @newPost="createNewPost"
       @lockApp="handleLockApp"
@@ -446,11 +595,14 @@ watch(isSourceMode, (newVal) => {
 
     <PostListModal
       :isOpen="showPostsModal"
-      :posts="posts"
+      :publishedPosts="publishedPosts"
+      :draftPosts="draftPosts"
       :isLoading="isLoadingPosts"
       :currentFilename="currentFilename || ''"
+      :currentType="currentType"
       @close="showPostsModal = false"
       @selectPost="loadPost"
+      @deleteDraft="handleDeleteDraft"
       @createNew="createNewPost"
       @refreshPosts="refreshPostsList"
     />

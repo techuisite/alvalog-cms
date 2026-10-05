@@ -13,7 +13,6 @@ export function useDrafts() {
         savedAt: new Date().toISOString()
       }));
       lastSavedAt.value = new Date();
-      isDirty.value = false;
     } catch (e) {
       console.warn('Failed to save local draft:', e);
     }
