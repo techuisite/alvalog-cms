@@ -1,12 +1,21 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { getGithubConfig, saveGithubConfig, testConnection } from '../services/github.js';
+import {
+  isSecuritySetup,
+  isBiometricEnabled,
+  isBiometricsSupported,
+  registerBiometrics,
+  disableBiometrics,
+  removePasscode,
+  setupPasscode
+} from '../services/auth.js';
 
 const props = defineProps({
   isOpen: { type: Boolean, default: false }
 });
 
-const emit = defineEmits(['close', 'configSaved']);
+const emit = defineEmits(['close', 'configSaved', 'securityUpdated']);
 
 const token = ref('');
 const repo = ref('techuisite/techuisite.github.io');
@@ -17,8 +26,19 @@ const isTesting = ref(false);
 const testResult = ref(null);
 const testError = ref('');
 
-onMounted(() => {
+// Security state
+const hasPin = ref(isSecuritySetup());
+const bioEnabled = ref(isBiometricEnabled());
+const bioSupported = ref(false);
+const showChangePin = ref(false);
+const newPin = ref('');
+const securityFeedback = ref('');
+
+onMounted(async () => {
   loadConfig();
+  hasPin.value = isSecuritySetup();
+  bioEnabled.value = isBiometricEnabled();
+  bioSupported.value = await isBiometricsSupported();
 });
 
 function loadConfig() {
@@ -46,6 +66,50 @@ async function handleTest() {
     testError.value = err.message || 'Connection test failed.';
   } finally {
     isTesting.value = false;
+  }
+}
+
+async function handleUpdatePin() {
+  securityFeedback.value = '';
+  if (!newPin.value || newPin.value.length < 4) {
+    securityFeedback.value = 'Passcode must be at least 4 digits.';
+    return;
+  }
+  await setupPasscode(newPin.value);
+  hasPin.value = true;
+  newPin.value = '';
+  showChangePin.value = false;
+  securityFeedback.value = 'Passcode successfully updated!';
+  emit('securityUpdated');
+}
+
+async function handleToggleBiometrics() {
+  securityFeedback.value = '';
+  if (bioEnabled.value) {
+    disableBiometrics();
+    bioEnabled.value = false;
+    securityFeedback.value = 'Biometrics disabled.';
+  } else {
+    try {
+      const ok = await registerBiometrics();
+      if (ok) {
+        bioEnabled.value = true;
+        securityFeedback.value = 'Biometric unlock enabled!';
+      }
+    } catch (e) {
+      securityFeedback.value = e.message || 'Could not register biometrics.';
+    }
+  }
+}
+
+function handleRemovePasscode() {
+  if (window.confirm('Remove passcode protection from this device?')) {
+    removePasscode();
+    hasPin.value = false;
+    bioEnabled.value = false;
+    showChangePin.value = false;
+    securityFeedback.value = 'Passcode removed.';
+    emit('securityUpdated');
   }
 }
 
@@ -155,6 +219,79 @@ function handleSave() {
 
           <div v-if="testError" class="test-error">
             {{ testError }}
+          </div>
+        </div>
+
+        <!-- Security & Passcode Section -->
+        <div class="security-section">
+          <div class="security-section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+            <h4>App Security & Passcode</h4>
+          </div>
+
+          <div class="security-row">
+            <div>
+              <div class="security-status-text">
+                Status: <strong>{{ hasPin ? '🔒 Passcode Protected' : '🔓 Unlocked' }}</strong>
+              </div>
+              <div class="security-hint">Requires a passcode or biometrics to open CMS</div>
+            </div>
+
+            <button
+              v-if="!showChangePin"
+              type="button"
+              class="btn-secondary sm"
+              @click="showChangePin = true"
+            >
+              {{ hasPin ? 'Change PIN' : 'Set PIN' }}
+            </button>
+          </div>
+
+          <!-- Set / Change PIN Form -->
+          <div v-if="showChangePin" class="pin-change-box">
+            <div class="pin-input-group">
+              <input
+                type="password"
+                v-model="newPin"
+                class="form-input"
+                inputmode="numeric"
+                maxlength="8"
+                placeholder="Enter 4-8 digit PIN"
+              />
+              <button type="button" class="btn-primary sm" @click="handleUpdatePin">Save PIN</button>
+              <button type="button" class="btn-secondary sm" @click="showChangePin = false">Cancel</button>
+            </div>
+          </div>
+
+          <!-- Biometric Toggle (FaceID / Fingerprint) -->
+          <div v-if="hasPin && bioSupported" class="security-row mt-2">
+            <div>
+              <div class="security-status-text">Biometric Unlock</div>
+              <div class="security-hint">Unlock instantly with FaceID / TouchID / Fingerprint</div>
+            </div>
+            <button
+              type="button"
+              class="btn-secondary sm"
+              :class="{ 'btn-active-bio': bioEnabled }"
+              @click="handleToggleBiometrics"
+            >
+              {{ bioEnabled ? '✓ Enabled' : 'Enable' }}
+            </button>
+          </div>
+
+          <!-- Remove Passcode -->
+          <div v-if="hasPin" class="security-row mt-2">
+            <span class="security-hint">Turn off passcode lock on this device</span>
+            <button type="button" class="btn-text-danger" @click="handleRemovePasscode">
+              Remove Lock
+            </button>
+          </div>
+
+          <div v-if="securityFeedback" class="security-feedback">
+            {{ securityFeedback }}
           </div>
         </div>
       </div>
@@ -303,6 +440,91 @@ function handleSave() {
   color: #ef4444;
   font-size: 0.85rem;
 }
+
+.security-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.security-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-heading);
+}
+
+.security-section-title svg {
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+}
+
+.security-section-title h4 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.security-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.security-status-text {
+  font-size: 0.85rem;
+  color: var(--text-heading);
+}
+
+.security-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.pin-change-box {
+  background: var(--bg-input);
+  padding: 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.pin-input-group {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-secondary.sm, .btn-primary.sm {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.btn-active-bio {
+  border-color: #22c55e;
+  color: #22c55e;
+}
+
+.btn-text-danger {
+  background: none;
+  border: none;
+  color: #ef4444;
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.security-feedback {
+  font-size: 0.8rem;
+  color: var(--accent);
+  padding: 0.25rem 0;
+}
+
+.mt-2 { margin-top: 0.5rem; }
 
 .modal-footer {
   padding: 1rem 1.5rem;

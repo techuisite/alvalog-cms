@@ -8,6 +8,8 @@ import FrontmatterDrawer from './components/FrontmatterDrawer.vue';
 import PostListModal from './components/PostListModal.vue';
 import ImageUploadModal from './components/ImageUploadModal.vue';
 import SettingsModal from './components/SettingsModal.vue';
+import LockScreen from './components/LockScreen.vue';
+import { isSessionUnlocked, lockSession, isSecuritySetup } from './services/auth.js';
 
 import {
   getGithubConfig,
@@ -24,6 +26,25 @@ const editorRef = ref(null);
 const isSourceMode = ref(false);
 const isDark = ref(localStorage.getItem('alvalog_theme') !== 'light');
 const isSaving = ref(false);
+
+// Security & Lock State
+const isUnlocked = ref(isSessionUnlocked());
+
+function handleUnlocked() {
+  isUnlocked.value = true;
+  if (hasToken.value) {
+    refreshPostsList();
+  }
+}
+
+function handleLockApp() {
+  lockSession();
+  isUnlocked.value = false;
+}
+
+function handleSecurityUpdated() {
+  isUnlocked.value = isSessionUnlocked();
+}
 
 // Modals & Drawers
 const showFrontmatterDrawer = ref(false);
@@ -311,7 +332,13 @@ watch(isSourceMode, (newVal) => {
 </script>
 
 <template>
-  <div class="app-layout">
+  <!-- Lock Screen Gate -->
+  <LockScreen
+    v-if="!isUnlocked"
+    @unlocked="handleUnlocked"
+  />
+
+  <div v-else class="app-layout">
     <!-- Top App Navigation -->
     <HeaderNav
       :postTitle="frontmatter.title"
@@ -329,6 +356,7 @@ watch(isSourceMode, (newVal) => {
       @openImageUpload="showImageModal = true"
       @publishPost="publishPost"
       @newPost="createNewPost"
+      @lockApp="handleLockApp"
     />
 
     <!-- Main Content / Writing Canvas -->
@@ -438,6 +466,7 @@ watch(isSourceMode, (newVal) => {
       :isOpen="showSettingsModal"
       @close="showSettingsModal = false"
       @configSaved="onConfigSaved"
+      @securityUpdated="handleSecurityUpdated"
     />
   </div>
 </template>
