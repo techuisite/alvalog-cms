@@ -11,12 +11,37 @@ const textareaRef = ref(null);
 function onInput(e) {
   emit('update:modelValue', e.target.value);
   adjustHeight();
+  handleTypewriterScroll();
 }
 
 function adjustHeight() {
   if (textareaRef.value) {
     textareaRef.value.style.height = 'auto';
     textareaRef.value.style.height = `${Math.max(textareaRef.value.scrollHeight, 400)}px`;
+  }
+}
+
+function handleTypewriterScroll() {
+  const textarea = textareaRef.value;
+  if (!textarea) return;
+
+  const caretPos = textarea.selectionStart;
+  const textBefore = textarea.value.substring(0, caretPos);
+  const lineIndex = textBefore.split('\n').length;
+  const lineHeight = 28; // approx line height in px
+  const caretOffsetTop = lineIndex * lineHeight;
+
+  const rect = textarea.getBoundingClientRect();
+  const caretScreenY = rect.top + caretOffsetTop;
+
+  const viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  const comfortBottom = viewportHeight * 0.52;
+
+  if (caretScreenY > comfortBottom) {
+    window.scrollBy({
+      top: caretScreenY - comfortBottom,
+      behavior: 'smooth'
+    });
   }
 }
 
@@ -51,6 +76,7 @@ onMounted(() => {
       :value="modelValue"
       @input="onInput"
       @keydown="handleKeyDown"
+      @keyup="handleTypewriterScroll"
       placeholder="Write your markdown here..."
       spellcheck="false"
     ></textarea>
@@ -61,7 +87,7 @@ onMounted(() => {
 .source-editor-container {
   width: 100%;
   min-height: calc(100vh - 220px);
-  padding: 1.5rem 0 8rem 0;
+  padding: 1.5rem 0 50vh 0;
 }
 
 .source-textarea {

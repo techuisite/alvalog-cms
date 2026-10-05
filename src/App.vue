@@ -96,6 +96,11 @@ function onMainTitleChange(e) {
   markAsDirty();
 }
 
+function onSubTitleChange(e) {
+  frontmatter.value.description = e.target.value;
+  markAsDirty();
+}
+
 function onContentUpdate(newMarkdown) {
   markdownContent.value = newMarkdown;
   markAsDirty();
@@ -510,47 +515,22 @@ watch(isSourceMode, (newVal) => {
 
     <!-- Main Content / Writing Canvas -->
     <main class="main-writing-area">
-      <!-- Title Input (styled directly as document H1) -->
-      <input
-        type="text"
-        class="post-main-title"
-        :value="frontmatter.title"
-        @input="onMainTitleChange"
-        placeholder="Post Title..."
-      />
-
-      <!-- Quick Meta Strip -->
-      <div class="post-meta-strip">
-        <span class="meta-item" @click="showFrontmatterDrawer = true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="16" y1="2" x2="16" y2="6"></line>
-            <line x1="8" y1="2" x2="8" y2="6"></line>
-            <line x1="3" y1="10" x2="21" y2="10"></line>
-          </svg>
-          {{ new Date(frontmatter.pubDate || Date.now()).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
-        </span>
-
-        <span class="meta-dot">&bull;</span>
-
-        <span class="meta-item" @click="showFrontmatterDrawer = true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
-            <line x1="7" y1="7" x2="7.01" y2="7"></line>
-          </svg>
-          {{ frontmatter.tags?.length ? frontmatter.tags.join(', ') : 'Add tags' }}
-        </span>
-
-        <span class="meta-dot">&bull;</span>
-
-        <span class="meta-item" @click="showFrontmatterDrawer = true">
-          {{ calculateReadingTime(markdownContent) }}
-        </span>
-
-        <span v-if="frontmatter.heroImage" class="meta-dot">&bull;</span>
-        <span v-if="frontmatter.heroImage" class="meta-item" @click="showFrontmatterDrawer = true">
-          📷 Cover image set
-        </span>
+      <!-- Document Header (H1 Title & H2 Subheader) -->
+      <div class="document-header">
+        <input
+          type="text"
+          class="post-main-title"
+          :value="frontmatter.title"
+          @input="onMainTitleChange"
+          placeholder="Post Title..."
+        />
+        <input
+          type="text"
+          class="post-sub-title"
+          :value="frontmatter.description || ''"
+          @input="onSubTitleChange"
+          placeholder="Add a subheader or summary..."
+        />
       </div>
 
       <!-- Editor Canvas: Visual (Milkdown) or Source (Raw Markdown) -->

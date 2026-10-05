@@ -1,4 +1,6 @@
 <script setup>
+import { ref, onMounted, onBeforeUnmount } from 'vue';
+
 const props = defineProps({
   postTitle: { type: String, default: '' },
   isPublished: { type: Boolean, default: false },
@@ -23,10 +25,27 @@ const emit = defineEmits([
   'newPost',
   'lockApp'
 ]);
+
+const showMenu = ref(false);
+
+function onDocClick(e) {
+  if (showMenu.value && !e.target.closest('.hamburger-container')) {
+    showMenu.value = false;
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('click', onDocClick);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('click', onDocClick);
+});
 </script>
 
 <template>
   <header class="app-header">
+    <!-- Left: Brand & Posts -->
     <div class="header-left">
       <div class="brand" @click="emit('togglePosts')">
         <span class="brand-text">Alvalog<span class="brand-dot">.</span></span>
@@ -43,14 +62,6 @@ const emit = defineEmits([
           <line x1="3" y1="18" x2="3.01" y2="18"></line>
         </svg>
         <span class="hide-mobile">Posts</span>
-      </button>
-
-      <button class="nav-btn" @click="emit('newPost')" title="Create new post">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="12" y1="5" x2="12" y2="19"></line>
-          <line x1="5" y1="12" x2="19" y2="12"></line>
-        </svg>
-        <span class="hide-mobile">New</span>
       </button>
     </div>
 
@@ -80,101 +91,27 @@ const emit = defineEmits([
       </span>
     </div>
 
-    <!-- Right: Tool buttons & Publish -->
+    <!-- Right: Save Draft (Floppy Disk), Publish (Airplane), Hamburger Menu -->
     <div class="header-right">
-      <!-- Frontmatter Drawer Toggle -->
-      <button class="tool-btn" @click="emit('toggleFrontmatter')" title="Edit Post Frontmatter & Details">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-          <polyline points="14 2 14 8 20 8"></polyline>
-          <line x1="16" y1="13" x2="8" y2="13"></line>
-          <line x1="16" y1="17" x2="8" y2="17"></line>
-          <polyline points="10 9 9 9 8 9"></polyline>
-        </svg>
-        <span class="hide-tablet">Details</span>
-      </button>
-
-      <!-- Source / Visual mode toggle -->
+      <!-- Save Draft (Floppy Disk Icon) -->
       <button
-        class="tool-btn"
-        :class="{ active: isSourceMode }"
-        @click="emit('toggleSourceMode')"
-        :title="isSourceMode ? 'Switch to Visual WYSIWYG' : 'Switch to Raw Markdown Source'"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="16 18 22 12 16 6"></polyline>
-          <polyline points="8 6 2 12 8 18"></polyline>
-        </svg>
-        <span class="hide-tablet">{{ isSourceMode ? 'Visual' : 'Source' }}</span>
-      </button>
-
-      <!-- Upload Image Button -->
-      <button class="tool-btn" @click="emit('openImageUpload')" title="Upload image to blog">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-          <circle cx="8.5" cy="8.5" r="1.5"></circle>
-          <polyline points="21 15 16 10 5 21"></polyline>
-        </svg>
-        <span class="hide-tablet">Image</span>
-      </button>
-
-      <!-- Theme Toggle -->
-      <button class="icon-btn" @click="emit('toggleTheme')" :title="isDark ? 'Light Mode' : 'Dark Mode'">
-        <svg v-if="isDark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="5"></circle>
-          <line x1="12" y1="1" x2="12" y2="3"></line>
-          <line x1="12" y1="21" x2="12" y2="23"></line>
-          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-          <line x1="1" y1="12" x2="3" y2="12"></line>
-          <line x1="21" y1="12" x2="23" y2="12"></line>
-          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-        </svg>
-        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-        </svg>
-      </button>
-
-      <!-- Settings Button -->
-      <button
-        class="icon-btn"
-        :class="{ 'needs-attention': !hasToken }"
-        @click="emit('openSettings')"
-        title="Settings"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="3"></circle>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-        </svg>
-      </button>
-
-      <!-- Lock App Button -->
-      <button class="icon-btn" @click="emit('lockApp')" title="Lock App">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-        </svg>
-      </button>
-
-      <!-- Save Draft Button -->
-      <button
-        class="draft-btn"
+        class="action-icon-btn draft-icon-btn"
+        :class="{ saving: isSavingDraft }"
         :disabled="isSaving || isSavingDraft"
         @click="emit('saveDraft')"
-        title="Save draft to Cloud (safe from publishing to alvalog.net)"
+        title="Save draft to Cloud (safe from live publishing)"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
           <polyline points="17 21 17 13 7 13 7 21"></polyline>
           <polyline points="7 3 7 8 15 8"></polyline>
         </svg>
-        <span class="hide-tablet">{{ isSavingDraft ? 'Saving...' : 'Save Draft' }}</span>
       </button>
 
-      <!-- Publish / Update Button -->
+      <!-- Publish / Update (Paper Airplane Icon) -->
       <button
-        class="publish-btn"
+        class="action-icon-btn publish-icon-btn"
+        :class="{ saving: isSaving }"
         :disabled="isSaving || isSavingDraft"
         @click="emit('publishPost')"
         :title="isPublished ? 'Update live blog post' : 'Publish post live to alvalog.net'"
@@ -183,8 +120,102 @@ const emit = defineEmits([
           <line x1="22" y1="2" x2="11" y2="13"></line>
           <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
         </svg>
-        <span>{{ isSaving ? 'Publishing...' : (isPublished ? 'Update' : 'Publish') }}</span>
       </button>
+
+      <!-- Hamburger Menu Container -->
+      <div class="hamburger-container">
+        <button
+          class="hamburger-btn"
+          :class="{ active: showMenu, 'needs-attention': !hasToken }"
+          @click="showMenu = !showMenu"
+          title="Menu"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="4" y1="7" x2="20" y2="7"></line>
+            <line x1="4" y1="12" x2="20" y2="12"></line>
+            <line x1="4" y1="17" x2="20" y2="17"></line>
+          </svg>
+        </button>
+
+        <!-- Dropdown / Popover -->
+        <div v-if="showMenu" class="hamburger-dropdown" @click.stop>
+          <div class="dropdown-section">
+            <button class="menu-item" @click="emit('newPost'); showMenu = false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>New Post</span>
+            </button>
+
+            <button class="menu-item" @click="emit('toggleFrontmatter'); showMenu = false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+              </svg>
+              <span>Post Details & Tags</span>
+            </button>
+
+            <button class="menu-item" @click="emit('toggleSourceMode'); showMenu = false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="16 18 22 12 16 6"></polyline>
+                <polyline points="8 6 2 12 8 18"></polyline>
+              </svg>
+              <span>{{ isSourceMode ? 'Switch to WYSIWYG Mode' : 'Switch to Markdown Source' }}</span>
+            </button>
+
+            <button class="menu-item" @click="emit('openImageUpload'); showMenu = false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                <polyline points="21 15 16 10 5 21"></polyline>
+              </svg>
+              <span>Insert Image</span>
+            </button>
+          </div>
+
+          <div class="dropdown-divider"></div>
+
+          <div class="dropdown-section">
+            <button class="menu-item" @click="emit('toggleTheme'); showMenu = false">
+              <svg v-if="isDark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="5"></circle>
+                <line x1="12" y1="1" x2="12" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="23"></line>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                <line x1="1" y1="12" x2="3" y2="12"></line>
+                <line x1="21" y1="12" x2="23" y2="12"></line>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+              </svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+              </svg>
+              <span>{{ isDark ? 'Light Theme' : 'Dark Theme' }}</span>
+            </button>
+
+            <button class="menu-item" :class="{ 'needs-attention': !hasToken }" @click="emit('openSettings'); showMenu = false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+              <span>GitHub Settings</span>
+            </button>
+
+            <button class="menu-item menu-item-lock" @click="emit('lockApp'); showMenu = false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+              </svg>
+              <span>Lock CMS Session</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </header>
 </template>
@@ -217,7 +248,7 @@ const emit = defineEmits([
 .header-left, .header-right {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.6rem;
 }
 
 .brand {
@@ -225,7 +256,7 @@ const emit = defineEmits([
   align-items: baseline;
   gap: 0.35rem;
   cursor: pointer;
-  margin-right: 0.5rem;
+  margin-right: 0.25rem;
 }
 
 .brand-text {
@@ -253,7 +284,7 @@ const emit = defineEmits([
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  max-width: 40%;
+  max-width: 45%;
 }
 
 .current-post-title {
@@ -293,7 +324,7 @@ const emit = defineEmits([
   color: #94a3b8;
 }
 
-.nav-btn, .tool-btn {
+.nav-btn {
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -307,115 +338,206 @@ const emit = defineEmits([
   transition: all 0.15s ease;
 }
 
-.nav-btn:hover, .tool-btn:hover {
+.nav-btn:hover {
   background: var(--chip-bg);
   color: var(--text-heading);
 }
 
-.tool-btn.active {
-  background: var(--chip-bg);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.tool-btn svg, .nav-btn svg {
+.nav-btn svg {
   width: 15px;
   height: 15px;
 }
 
-.icon-btn {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
+/* Action Icon Buttons: Save Draft (Floppy Disk) & Publish (Airplane) */
+.action-icon-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0.45rem;
-  border-radius: 6px;
-  position: relative;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
 }
 
-.icon-btn:hover {
+.draft-icon-btn {
   background: var(--chip-bg);
-  color: var(--text-heading);
+  border-color: var(--border);
+  color: #38bdf8; /* sky blue floppy disk */
 }
 
-.icon-btn svg {
+.draft-icon-btn:hover {
+  background: var(--border);
+  border-color: #38bdf8;
+  color: #38bdf8;
+  transform: translateY(-1px);
+}
+
+.draft-icon-btn svg {
   width: 18px;
   height: 18px;
 }
 
-.icon-btn.needs-attention:after {
+.publish-icon-btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+}
+
+.publish-icon-btn:hover {
+  background: var(--accent-hover, #2563eb);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+}
+
+.publish-icon-btn svg {
+  width: 17px;
+  height: 17px;
+}
+
+.action-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.action-icon-btn.saving svg {
+  animation: pulse 1s infinite alternate;
+}
+
+@keyframes pulse {
+  from { opacity: 0.4; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1.05); }
+}
+
+/* Hamburger Menu */
+.hamburger-container {
+  position: relative;
+}
+
+.hamburger-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.hamburger-btn:hover, .hamburger-btn.active {
+  background: var(--chip-bg);
+  color: var(--text-heading);
+}
+
+.hamburger-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.hamburger-btn.needs-attention:after {
   content: "";
   position: absolute;
-  top: 4px;
-  right: 4px;
+  top: 6px;
+  right: 6px;
   width: 7px;
   height: 7px;
   background: #f59e0b;
   border-radius: 50%;
 }
 
-.draft-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  background: var(--chip-bg);
+/* Floating Dropdown */
+.hamburger-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 250px;
+  background: var(--bg-surface);
   border: 1px solid var(--border);
-  color: var(--text-heading);
-  padding: 0.45rem 0.85rem;
-  border-radius: 8px;
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
+  padding: 0.4rem;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  animation: fadeInDown 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.draft-btn:hover {
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.dropdown-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.dropdown-divider {
+  height: 1px;
   background: var(--border);
-  border-color: var(--text-muted);
+  margin: 0.35rem 0.25rem;
 }
 
-.draft-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.draft-btn svg {
-  width: 14px;
-  height: 14px;
-  color: #38bdf8;
-}
-
-.publish-btn {
+.menu-item {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  background: var(--accent);
-  color: #fff;
+  gap: 0.65rem;
+  padding: 0.6rem 0.85rem;
+  background: transparent;
   border: none;
-  padding: 0.45rem 0.95rem;
   border-radius: 8px;
-  font-size: 0.85rem;
-  font-weight: 600;
+  color: var(--text-main);
+  font-size: 0.88rem;
   cursor: pointer;
-  transition: opacity 0.15s ease;
+  text-align: left;
+  transition: background 0.15s ease, color 0.15s ease;
+  width: 100%;
 }
 
-.publish-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.menu-item:hover {
+  background: var(--chip-bg);
+  color: var(--text-heading);
 }
 
-.publish-btn svg {
-  width: 14px;
-  height: 14px;
+.menu-item svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  flex-shrink: 0;
 }
 
-@media (max-width: 768px) {
-  .hide-tablet { display: none; }
-  .header-center { max-width: 25%; }
+.menu-item:hover svg {
+  color: var(--accent);
+}
+
+.menu-item.needs-attention {
+  color: #f59e0b;
+}
+
+.menu-item.needs-attention svg {
+  color: #f59e0b;
+}
+
+.menu-item-lock:hover {
+  color: #ef4444;
+}
+
+.menu-item-lock:hover svg {
+  color: #ef4444;
 }
 
 @media (max-width: 580px) {
