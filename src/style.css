@@ -137,13 +137,6 @@ html, body {
   gap: 1rem;
 }
 
-/* PWA safe area support */
-@supports (padding: env(safe-area-inset-top)) {
-  .app-header {
-    padding-top: env(safe-area-inset-top);
-    height: calc(56px + env(safe-area-inset-top));
-  }
-}
 
 /* Custom Scrollbars */
 ::-webkit-scrollbar {
