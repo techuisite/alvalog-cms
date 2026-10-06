@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue';
-import { getGithubConfig, saveGithubConfig, testConnection } from '../services/github.js';
+import { getGithubConfig, saveGithubConfig, testConnection, DEFAULT_DRAFTS_REPO } from '../services/github.js';
 import {
   isSecuritySetup,
   isBiometricEnabled,
@@ -19,6 +19,7 @@ const emit = defineEmits(['close', 'configSaved', 'securityUpdated']);
 
 const token = ref('');
 const repo = ref('techuisite/techuisite.github.io');
+const draftsRepo = ref(DEFAULT_DRAFTS_REPO);
 const branch = ref('main');
 const showToken = ref(false);
 
@@ -45,6 +46,7 @@ function loadConfig() {
   const cfg = getGithubConfig();
   token.value = cfg.token;
   repo.value = cfg.repo;
+  draftsRepo.value = cfg.draftsRepo || DEFAULT_DRAFTS_REPO;
   branch.value = cfg.branch;
   testResult.value = null;
   testError.value = '';
@@ -59,6 +61,7 @@ async function handleTest() {
     const res = await testConnection({
       token: token.value,
       repo: repo.value,
+      draftsRepo: draftsRepo.value,
       branch: branch.value
     });
     testResult.value = res;
@@ -117,6 +120,7 @@ function handleSave() {
   saveGithubConfig({
     token: token.value,
     repo: repo.value,
+    draftsRepo: draftsRepo.value,
     branch: branch.value
   });
   emit('configSaved');
@@ -187,7 +191,7 @@ function handleClearCache() {
         <!-- Repo & Branch -->
         <div class="form-row">
           <div class="form-group flex-1">
-            <label class="form-label">Repository</label>
+            <label class="form-label">Published Blog Repository</label>
             <input
               type="text"
               class="form-input"
@@ -203,6 +207,22 @@ function handleClearCache() {
               v-model="branch"
               placeholder="main"
             />
+          </div>
+        </div>
+
+        <!-- Private Drafts Repository -->
+        <div class="form-group">
+          <label class="form-label">
+            <span>Private Drafts Repository (Cloud Sync)</span>
+          </label>
+          <input
+            type="text"
+            class="form-input"
+            v-model="draftsRepo"
+            placeholder="techuisite/alvalog-drafts"
+          />
+          <div class="token-help">
+            Private repository used exclusively for your unpublished drafts. Never visible to the public and never triggers website rebuilds.
           </div>
         </div>
 
@@ -222,6 +242,9 @@ function handleClearCache() {
             <div>
               <div class="user-name">Connected as <strong>@{{ testResult.user.login }}</strong></div>
               <div class="repo-check">Access verified to {{ testResult.repo.full_name }}</div>
+              <div v-if="testResult.draftsRepo" class="repo-check" style="margin-top: 2px;">
+                🔒 Private drafts verified in {{ testResult.draftsRepo.full_name }}
+              </div>
             </div>
           </div>
 
@@ -307,7 +330,7 @@ function handleClearCache() {
         <div class="form-group security-card">
           <div class="security-card-header">
             <span class="security-card-title">PWA Version & Cache</span>
-            <span class="version-badge">v1.3.0</span>
+            <span class="version-badge">v1.4.0</span>
           </div>
           <p class="security-desc">
             If updates to the CMS don't immediately appear on your iPad or PC due to browser service worker caching, tap below to clear cache and load the latest build.

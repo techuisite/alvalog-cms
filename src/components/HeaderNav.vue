@@ -23,7 +23,8 @@ const emit = defineEmits([
   'saveDraft',
   'publishPost',
   'newPost',
-  'lockApp'
+  'lockApp',
+  'hideHeader'
 ]);
 
 const showMenu = ref(false);
@@ -131,6 +132,17 @@ function handleForceUpdate() {
         </svg>
       </button>
 
+      <!-- Hide Top Bar (Clean Canvas) -->
+      <button
+        class="action-icon-btn focus-canvas-btn"
+        @click="emit('hideHeader')"
+        title="Hide Top Bar for Clean Canvas (Ctrl+\ or Esc to reveal)"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="18 15 12 9 6 15"></polyline>
+        </svg>
+      </button>
+
       <!-- Hamburger Menu Container -->
       <div class="hamburger-container">
         <button
@@ -155,6 +167,14 @@ function handleForceUpdate() {
                 <line x1="5" y1="12" x2="19" y2="12"></line>
               </svg>
               <span>New Post</span>
+            </button>
+
+            <button class="menu-item" @click="emit('hideHeader'); showMenu = false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="18 15 12 9 6 15"></polyline>
+              </svg>
+              <span>Hide Top Bar (Clean Canvas)</span>
+              <span class="menu-shortcut">Ctrl+\</span>
             </button>
 
             <button class="menu-item" @click="emit('toggleFrontmatter'); showMenu = false">
@@ -220,7 +240,7 @@ function handleForceUpdate() {
                 <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
               </svg>
               <span>Check for Updates & Reload</span>
-              <span class="menu-shortcut">v1.3.0</span>
+              <span class="menu-shortcut">v1.4.0</span>
             </button>
 
             <button class="menu-item menu-item-lock" @click="emit('lockApp'); showMenu = false" title="Lock CMS (Win/Cmd + Shift + L)">
@@ -410,6 +430,23 @@ function handleForceUpdate() {
 }
 
 .publish-icon-btn svg {
+  width: 17px;
+  height: 17px;
+}
+
+.focus-canvas-btn {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+}
+
+.focus-canvas-btn:hover {
+  background: var(--chip-bg);
+  color: var(--text-heading);
+  transform: translateY(-1px);
+}
+
+.focus-canvas-btn svg {
   width: 17px;
   height: 17px;
 }

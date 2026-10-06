@@ -5,9 +5,9 @@ import { Editor, rootCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx }
 import { commonmark, linkSchema, hrSchema } from '@milkdown/preset-commonmark';
 import { history } from '@milkdown/plugin-history';
 import { listener, listenerCtx } from '@milkdown/plugin-listener';
-import { replaceAll, $inputRule } from '@milkdown/utils';
+import { replaceAll, $inputRuleAsync, $proseAsync } from '@milkdown/utils';
 import { InputRule } from '@milkdown/prose/inputrules';
-import { Selection } from '@milkdown/prose/state';
+import { Selection, Plugin, PluginKey } from '@milkdown/prose/state';
 
 const props = defineProps({
   initialContent: { type: String, default: '' },
@@ -19,7 +19,7 @@ let isInitialized = false;
 let currentInternalMarkdown = props.initialContent || '';
 
 // Input rule: Auto-format [text](url) to styled link mark
-const inlineLinkInputRule = $inputRule((ctx) => {
+const inlineLinkInputRule = $inputRuleAsync((ctx) => {
   return new InputRule(
     /(?:^|[^[])\[([^\]]+)\]\(([^)]+)\)$/,
     (state, match, start, end) => {
@@ -36,10 +36,10 @@ const inlineLinkInputRule = $inputRule((ctx) => {
       return tr;
     }
   );
-});
+}, 'inlineLinkInputRule');
 
 // Input rule: Auto-format bare URLs followed by space to styled link mark
-const autoLinkInputRule = $inputRule((ctx) => {
+const autoLinkInputRule = $inputRuleAsync((ctx) => {
   return new InputRule(
     /(?:^|\s)(https?:\/\/[^\s]+)\s$/,
     (state, match, start, end) => {
@@ -57,10 +57,10 @@ const autoLinkInputRule = $inputRule((ctx) => {
       return tr;
     }
   );
-});
+}, 'autoLinkInputRule');
 
 // Input rule: Auto-convert `--- ` or `---` at start of line to horizontal divider rule <hr>
-const customHrInputRule = $inputRule((ctx) => {
+const customHrInputRule = $inputRuleAsync((ctx) => {
   return new InputRule(
     /^(?:---\s?|___\s|\*\*\*\s)$/,
     (state, match, start, end) => {
@@ -71,10 +71,10 @@ const customHrInputRule = $inputRule((ctx) => {
       return tr;
     }
   );
-});
+}, 'customHrInputRule');
 
 // Input rule: Auto-convert `-- ` inside text or at start to em-dash `— ` (the long dash line)
-const emDashInputRule = $inputRule((ctx) => {
+const emDashInputRule = $inputRuleAsync((ctx) => {
   return new InputRule(
     /(?:^|[^-])(--)\s$/,
     (state, match, start, end) => {
@@ -85,7 +85,23 @@ const emDashInputRule = $inputRule((ctx) => {
       return tr;
     }
   );
-});
+}, 'emDashInputRule');
+
+// ProseMirror plugin to keep active cursor in comfortable upper viewing area
+const typewriterScrollPlugin = $proseAsync(() => {
+  return new Plugin({
+    key: new PluginKey('typewriterScrollPlugin'),
+    view() {
+      return {
+        update(view, prevState) {
+          if (!view.state.doc.eq(prevState.doc) || !view.state.selection.eq(prevState.selection)) {
+            handleTypewriterScroll();
+          }
+        }
+      };
+    }
+  });
+}, 'typewriterScrollPlugin');
 
 // Robust cursor coordinates detector (handles collapsed carets, iOS Safari, and ProseMirror)
 function getCaretRect() {
@@ -141,7 +157,7 @@ function handleTypewriterScroll() {
       const scrollNeeded = rect.bottom - comfortBottom;
       window.scrollBy({
         top: scrollNeeded,
-        behavior: 'instant'
+        behavior: 'smooth'
       });
     }
   });
@@ -210,6 +226,22 @@ function onSelectionChange() {
 onMounted(() => {
   window.addEventListener('click', onWindowClick);
   document.addEventListener('selectionchange', onSelectionChange);
+
+  // Robust fallback: if initialContent is provided, ensure editor parses and sets it
+  if (props.initialContent) {
+    let retries = 0;
+    const ensureContent = () => {
+      const editor = get();
+      if (editor) {
+        editor.action(replaceAll(props.initialContent));
+        isInitialized = true;
+      } else if (retries < 20) {
+        retries++;
+        setTimeout(ensureContent, 50);
+      }
+    };
+    setTimeout(ensureContent, 30);
+  }
 });
 
 onBeforeUnmount(() => {
@@ -233,6 +265,7 @@ const { get } = useEditor((root) =>
     .use(autoLinkInputRule)
     .use(customHrInputRule)
     .use(emDashInputRule)
+    .use(typewriterScrollPlugin)
     .use(history)
     .use(listener)
     .config((ctx) => {
@@ -248,6 +281,11 @@ const { get } = useEditor((root) =>
         // Skip the initial mount update so it never wipes saved drafts or emits false dirty
         if (!isInitialized) {
           isInitialized = true;
+          return;
+        }
+
+        // Safety: If Milkdown emits empty string while props.initialContent was non-empty, do not wipe!
+        if (!unescaped && props.initialContent && props.initialContent.trim().length > 0) {
           return;
         }
 

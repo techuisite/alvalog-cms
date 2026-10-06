@@ -60,6 +60,11 @@ const isUnlocked = ref(isSessionUnlocked());
 
 function handleUnlocked() {
   isUnlocked.value = true;
+  nextTick(() => {
+    if (markdownContent.value) {
+      editorRef.value?.setContent(markdownContent.value);
+    }
+  });
   if (hasToken.value) {
     refreshPostsList();
   }
@@ -72,6 +77,16 @@ function handleLockApp() {
 
 function handleSecurityUpdated() {
   isUnlocked.value = isSessionUnlocked();
+}
+
+// Header Visibility State (Focus Canvas Mode)
+const isHeaderHidden = ref(localStorage.getItem('alvalog_header_hidden') === 'true');
+
+function toggleHeader() {
+  isHeaderHidden.value = !isHeaderHidden.value;
+  try {
+    localStorage.setItem('alvalog_header_hidden', isHeaderHidden.value ? 'true' : 'false');
+  } catch (e) {}
 }
 
 // Modals & Drawers
@@ -195,7 +210,7 @@ async function loadPost(item, type = 'published') {
 
   try {
     isLoadingPosts.value = true;
-    const { sha, rawText, name } = await fetchPostContent(item.path);
+    const { sha, rawText, name } = await fetchPostContent(item.path, type === 'draft');
     const parsed = parsePost(rawText);
 
     frontmatter.value = parsed.frontmatter;
@@ -258,12 +273,12 @@ async function refreshPostsList() {
 
     publishedPosts.value = parsedPublished;
 
-    // 2. Fetch drafts
+    // 2. Fetch drafts from private drafts repository
     const draftFiles = await fetchDraftFilesList();
     const parsedDrafts = await Promise.all(
       draftFiles.map(async (file) => {
         try {
-          const contentData = await fetchPostContent(file.path);
+          const contentData = await fetchPostContent(file.path, true);
           const parsed = parsePost(contentData.rawText);
           (parsed.frontmatter.tags || []).forEach(t => tagSet.add(t));
           return {
@@ -479,12 +494,20 @@ function handleGlobalKeydown(e) {
     e.preventDefault();
     isSourceMode.value = !isSourceMode.value;
   }
-  // Lock CMS shortcut: Win+Shift+L (Windows) or Cmd+Shift+L (iPadOS/macOS)
+  // Lock CMS shortcut: Win+Shift+L, Ctrl+Shift+L, Alt+Shift+L, or Cmd+Shift+L
   if (
-    (e.metaKey || e.ctrlKey) && e.shiftKey && (e.key.toLowerCase() === 'l' || e.code === 'KeyL')
+    (e.metaKey || e.ctrlKey || e.altKey) && e.shiftKey && (e.key.toLowerCase() === 'l' || e.code === 'KeyL')
   ) {
     e.preventDefault();
     handleLockApp();
+  }
+  // Toggle Header / Focus Canvas: Ctrl+\, Cmd+\, or Escape (when header is hidden)
+  if ((e.ctrlKey || e.metaKey) && e.key === '\\') {
+    e.preventDefault();
+    toggleHeader();
+  }
+  if (e.key === 'Escape' && isHeaderHidden.value) {
+    toggleHeader();
   }
 }
 
@@ -531,8 +554,24 @@ watch(isSourceMode, (newVal) => {
   />
 
   <div v-else class="app-layout">
+    <!-- Floating Reveal Button when Top Bar is hidden -->
+    <transition name="fade">
+      <button
+        v-if="isHeaderHidden"
+        class="floating-header-reveal"
+        @click="toggleHeader"
+        title="Show Top Bar (Ctrl+\ or Esc)"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+        <span>Show Menu</span>
+      </button>
+    </transition>
+
     <!-- Top App Navigation -->
     <HeaderNav
+      :class="{ 'header-hidden': isHeaderHidden }"
       :postTitle="frontmatter.title"
       :isPublished="isPublished"
       :isDraft="isDraft"
@@ -552,6 +591,7 @@ watch(isSourceMode, (newVal) => {
       @publishPost="publishPost"
       @newPost="createNewPost"
       @lockApp="handleLockApp"
+      @hideHeader="toggleHeader"
     />
 
     <!-- Main Content / Writing Canvas -->
@@ -626,7 +666,7 @@ watch(isSourceMode, (newVal) => {
       </div>
       <div class="status-right">
         <span>{{ isSourceMode ? 'Markdown Source Mode' : 'WYSIWYG Mode' }}</span>
-        <span class="version-tag">v1.3.0</span>
+        <span class="version-tag">v1.4.0</span>
       </div>
     </footer>
 

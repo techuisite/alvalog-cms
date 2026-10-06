@@ -51,6 +51,64 @@ html, body {
   overflow-x: clip;
 }
 
+/* Header Transitions & Visibility (Focus Canvas Mode) */
+.app-header {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), margin-top 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.app-header.header-hidden {
+  transform: translateY(-100%);
+  margin-top: calc(-1 * (56px + var(--safe-top, 0px)));
+  pointer-events: none;
+}
+
+/* Floating Reveal Button when header is hidden */
+.floating-header-reveal {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top, 12px));
+  right: max(16px, env(safe-area-inset-right, 16px));
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 0.35rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(8px);
+  opacity: 0.65;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.floating-header-reveal:hover {
+  opacity: 1;
+  color: var(--text-heading);
+  border-color: var(--accent);
+  transform: translateY(1px);
+}
+
+.floating-header-reveal svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.5;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
 .main-writing-area {
   flex: 1;
   width: 100%;

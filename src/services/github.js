@@ -6,28 +6,32 @@
 const STORAGE_KEYS = {
   TOKEN: 'alvalog_gh_token',
   REPO: 'alvalog_gh_repo',
+  DRAFTS_REPO: 'alvalog_gh_drafts_repo',
   BRANCH: 'alvalog_gh_branch',
 };
 
 const DEFAULT_REPO = 'techuisite/techuisite.github.io';
+const DEFAULT_DRAFTS_REPO = 'techuisite/alvalog-drafts';
 const DEFAULT_BRANCH = 'main';
 const POSTS_PATH = 'src/content/blog';
-const DRAFTS_PATH = 'src/content/drafts';
+const DRAFTS_PATH = 'drafts';
 const IMAGES_BASE_PATH = 'public/content/images';
 
-export { POSTS_PATH, DRAFTS_PATH, IMAGES_BASE_PATH };
+export { POSTS_PATH, DRAFTS_PATH, IMAGES_BASE_PATH, DEFAULT_DRAFTS_REPO };
 
 export function getGithubConfig() {
   return {
     token: localStorage.getItem(STORAGE_KEYS.TOKEN) || '',
     repo: localStorage.getItem(STORAGE_KEYS.REPO) || DEFAULT_REPO,
+    draftsRepo: localStorage.getItem(STORAGE_KEYS.DRAFTS_REPO) || DEFAULT_DRAFTS_REPO,
     branch: localStorage.getItem(STORAGE_KEYS.BRANCH) || DEFAULT_BRANCH,
   };
 }
 
-export function saveGithubConfig({ token, repo, branch }) {
+export function saveGithubConfig({ token, repo, draftsRepo, branch }) {
   if (token !== undefined) localStorage.setItem(STORAGE_KEYS.TOKEN, token.trim());
   if (repo !== undefined) localStorage.setItem(STORAGE_KEYS.REPO, repo.trim() || DEFAULT_REPO);
+  if (draftsRepo !== undefined) localStorage.setItem(STORAGE_KEYS.DRAFTS_REPO, draftsRepo.trim() || DEFAULT_DRAFTS_REPO);
   if (branch !== undefined) localStorage.setItem(STORAGE_KEYS.BRANCH, branch.trim() || DEFAULT_BRANCH);
 }
 
@@ -91,6 +95,22 @@ export async function testConnection(config = null) {
   }
   const repo = await repoRes.json();
 
+  // 3. Check drafts repo access (if configured)
+  const draftsRepoName = cfg.draftsRepo || DEFAULT_DRAFTS_REPO;
+  let draftsRepoData = null;
+  if (draftsRepoName) {
+    try {
+      const draftsRes = await fetch(`https://api.github.com/repos/${draftsRepoName}`, {
+        headers: getHeaders(cfg.token)
+      });
+      if (draftsRes.ok) {
+        draftsRepoData = await draftsRes.json();
+      }
+    } catch {
+      // non-fatal
+    }
+  }
+
   return {
     ok: true,
     user: {
@@ -102,7 +122,11 @@ export async function testConnection(config = null) {
       full_name: repo.full_name,
       default_branch: repo.default_branch,
       permissions: repo.permissions
-    }
+    },
+    draftsRepo: draftsRepoData ? {
+      full_name: draftsRepoData.full_name,
+      private: draftsRepoData.private
+    } : null
   };
 }
 
@@ -124,7 +148,8 @@ export async function fetchDraftFilesList() {
   const cfg = getGithubConfig();
   if (!cfg.token) throw new Error('GitHub token not configured.');
 
-  const url = `https://api.github.com/repos/${cfg.repo}/contents/${DRAFTS_PATH}?ref=${cfg.branch}`;
+  const draftsRepo = cfg.draftsRepo || DEFAULT_DRAFTS_REPO;
+  const url = `https://api.github.com/repos/${draftsRepo}/contents/${DRAFTS_PATH}?ref=${cfg.branch}`;
   const res = await fetch(url, { headers: getHeaders(cfg.token) });
   if (!res.ok) {
     if (res.status === 404) return [];
@@ -134,14 +159,15 @@ export async function fetchDraftFilesList() {
   return items.filter(item => item.type === 'file' && item.name.endsWith('.md'));
 }
 
-export async function fetchPostContent(filePath) {
+export async function fetchPostContent(filePath, isDraft = false) {
   const cfg = getGithubConfig();
   if (!cfg.token) throw new Error('GitHub token not configured.');
 
-  const url = `https://api.github.com/repos/${cfg.repo}/contents/${filePath}?ref=${cfg.branch}`;
+  const targetRepo = isDraft ? (cfg.draftsRepo || DEFAULT_DRAFTS_REPO) : (cfg.repo || DEFAULT_REPO);
+  const url = `https://api.github.com/repos/${targetRepo}/contents/${filePath}?ref=${cfg.branch}`;
   const res = await fetch(url, { headers: getHeaders(cfg.token) });
   if (!res.ok) {
-    throw new Error(`Failed to load post content (status ${res.status}).`);
+    throw new Error(`Failed to load content (status ${res.status}).`);
   }
 
   const data = await res.json();
@@ -221,8 +247,9 @@ export async function saveDraftToGithub({ filename, contentString, sha = null, c
   const cfg = getGithubConfig();
   if (!cfg.token) throw new Error('GitHub token not configured.');
 
+  const draftsRepo = cfg.draftsRepo || DEFAULT_DRAFTS_REPO;
   const path = `${DRAFTS_PATH}/${filename}`;
-  const url = `https://api.github.com/repos/${cfg.repo}/contents/${path}`;
+  const url = `https://api.github.com/repos/${draftsRepo}/contents/${path}`;
   
   const payload = {
     message: commitMessage || (sha ? `Update draft: ${filename}` : `Save draft: ${filename}`),
@@ -257,8 +284,9 @@ export async function deleteDraftFromGithub({ filename, sha, commitMessage = nul
   const cfg = getGithubConfig();
   if (!cfg.token) throw new Error('GitHub token not configured.');
 
+  const draftsRepo = cfg.draftsRepo || DEFAULT_DRAFTS_REPO;
   const path = `${DRAFTS_PATH}/${filename}`;
-  const url = `https://api.github.com/repos/${cfg.repo}/contents/${path}`;
+  const url = `https://api.github.com/repos/${draftsRepo}/contents/${path}`;
 
   const payload = {
     message: commitMessage || `Delete draft: ${filename}`,
