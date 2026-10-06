@@ -98,6 +98,7 @@ export async function testConnection(config = null) {
   // 3. Check drafts repo access (if configured)
   const draftsRepoName = cfg.draftsRepo || DEFAULT_DRAFTS_REPO;
   let draftsRepoData = null;
+  let draftsRepoError = null;
   if (draftsRepoName) {
     try {
       const draftsRes = await fetch(`https://api.github.com/repos/${draftsRepoName}`, {
@@ -105,9 +106,13 @@ export async function testConnection(config = null) {
       });
       if (draftsRes.ok) {
         draftsRepoData = await draftsRes.json();
+      } else {
+        draftsRepoError = draftsRes.status === 404
+          ? `Repository not found or token lacks access. If using a Fine-Grained PAT, ensure "${draftsRepoName}" is added under Selected Repositories on GitHub.`
+          : `Access failed (status ${draftsRes.status})`;
       }
-    } catch {
-      // non-fatal
+    } catch (e) {
+      draftsRepoError = e.message;
     }
   }
 
@@ -126,7 +131,8 @@ export async function testConnection(config = null) {
     draftsRepo: draftsRepoData ? {
       full_name: draftsRepoData.full_name,
       private: draftsRepoData.private
-    } : null
+    } : null,
+    draftsRepoError
   };
 }
 
@@ -152,7 +158,17 @@ export async function fetchDraftFilesList() {
   const url = `https://api.github.com/repos/${draftsRepo}/contents/${DRAFTS_PATH}?ref=${cfg.branch}`;
   const res = await fetch(url, { headers: getHeaders(cfg.token) });
   if (!res.ok) {
-    if (res.status === 404) return [];
+    if (res.status === 404) {
+      // Check whether the repo itself is inaccessible (GitHub returns 404 for unauthorized private repos)
+      const repoCheck = await fetch(`https://api.github.com/repos/${draftsRepo}`, { headers: getHeaders(cfg.token) });
+      if (!repoCheck.ok) {
+        throw new Error(`GitHub token lacks access to private drafts repo "${draftsRepo}". If using a Fine-Grained PAT, please add "${draftsRepo}" to your token's Selected Repositories on GitHub.`);
+      }
+      return [];
+    }
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(`GitHub token lacks permission to access "${draftsRepo}".`);
+    }
     throw new Error(`Failed to load drafts list (status ${res.status}).`);
   }
   const items = await res.json();

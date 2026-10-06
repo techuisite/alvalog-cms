@@ -184,7 +184,7 @@ function handleClearCache() {
             </button>
           </div>
           <div class="token-help">
-            Required permissions: <strong>Contents (Read and Write)</strong> for <code>techuisite/techuisite.github.io</code>.
+            Required permissions: <strong>Contents (Read and Write)</strong> for both <code>techuisite/techuisite.github.io</code> and <code>techuisite/alvalog-drafts</code>.
           </div>
         </div>
 
@@ -242,8 +242,11 @@ function handleClearCache() {
             <div>
               <div class="user-name">Connected as <strong>@{{ testResult.user.login }}</strong></div>
               <div class="repo-check">Access verified to {{ testResult.repo.full_name }}</div>
-              <div v-if="testResult.draftsRepo" class="repo-check" style="margin-top: 2px;">
+              <div v-if="testResult.draftsRepo" class="repo-check" style="margin-top: 3px; color: #38bdf8;">
                 🔒 Private drafts verified in {{ testResult.draftsRepo.full_name }}
+              </div>
+              <div v-else-if="testResult.draftsRepoError" class="repo-warning" style="margin-top: 4px; color: #f59e0b; font-size: 0.76rem; line-height: 1.4;">
+                ⚠️ {{ testResult.draftsRepoError }}
               </div>
             </div>
           </div>
@@ -365,6 +368,9 @@ function handleClearCache() {
 .modal-panel {
   width: 100%;
   max-width: 520px;
+  max-height: calc(100vh - 2.5rem);
+  display: flex;
+  flex-direction: column;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -373,7 +379,8 @@ function handleClearCache() {
 }
 
 .modal-header {
-  padding: 1.25rem 1.5rem;
+  flex-shrink: 0;
+  padding: 1.1rem 1.5rem;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -400,10 +407,14 @@ function handleClearCache() {
 }
 
 .modal-body {
-  padding: 1.5rem;
+  padding: 1.25rem 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1.15rem;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  overscroll-behavior: contain;
 }
 
 .settings-intro {
@@ -588,10 +599,12 @@ function handleClearCache() {
 }
 
 .modal-footer {
-  padding: 1rem 1.5rem;
+  flex-shrink: 0;
+  padding: 0.85rem 1.5rem;
   border-top: 1px solid var(--border);
   display: flex;
   justify-content: flex-end;
   gap: 0.75rem;
+  background: var(--bg-surface);
 }
 </style>

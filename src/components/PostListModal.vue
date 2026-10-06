@@ -7,10 +7,11 @@ const props = defineProps({
   draftPosts: { type: Array, default: () => [] },
   isLoading: { type: Boolean, default: false },
   currentFilename: { type: String, default: '' },
-  currentType: { type: String, default: 'new' }
+  currentType: { type: String, default: 'new' },
+  draftsError: { type: String, default: '' }
 });
 
-const emit = defineEmits(['close', 'selectPost', 'deleteDraft', 'createNew', 'refreshPosts']);
+const emit = defineEmits(['close', 'selectPost', 'deleteDraft', 'createNew', 'refreshPosts', 'openSettings']);
 
 const activeTab = ref('published');
 const searchQuery = ref('');
@@ -140,6 +141,16 @@ function onDeleteDraft(item) {
 
       <!-- List Items -->
       <div class="post-list">
+        <!-- Drafts Error Banner -->
+        <div v-if="activeTab === 'drafts' && draftsError" class="drafts-error-banner">
+          <div class="drafts-error-icon">⚠️</div>
+          <div class="drafts-error-content">
+            <div class="drafts-error-title">Cannot access private drafts repository</div>
+            <div class="drafts-error-text">{{ draftsError }}</div>
+            <button class="drafts-error-btn" @click="emit('openSettings')">Open GitHub Settings</button>
+          </div>
+        </div>
+
         <div v-if="isLoading" class="loading-state">
           <div class="spinner"></div>
           <p>Loading from GitHub...</p>
@@ -149,7 +160,7 @@ function onDeleteDraft(item) {
           <template v-if="activeTab === 'drafts'">
             <div class="empty-icon">📝</div>
             <p class="empty-title">No cloud drafts in progress</p>
-            <p class="empty-hint">Click <strong>Save Draft</strong> while writing to sync your posts securely across all your devices without publishing live.</p>
+            <p class="empty-hint">Drafts are stored securely in your private <code>techuisite/alvalog-drafts</code> repository.</p>
           </template>
           <template v-else>
             <p>No published posts found matching your search.</p>
@@ -562,6 +573,57 @@ function onDeleteDraft(item) {
 .refresh-icon {
   width: 14px;
   height: 14px;
+}
+
+.drafts-error-banner {
+  display: flex;
+  gap: 0.75rem;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.85rem;
+  color: #f59e0b;
+}
+
+.drafts-error-icon {
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+
+.drafts-error-content {
+  flex: 1;
+}
+
+.drafts-error-title {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text-heading);
+}
+
+.drafts-error-text {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+  line-height: 1.45;
+}
+
+.drafts-error-btn {
+  margin-top: 0.6rem;
+  padding: 0.35rem 0.75rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-heading);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.drafts-error-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 @media (max-width: 600px) {

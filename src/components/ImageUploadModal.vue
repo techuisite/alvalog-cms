@@ -187,6 +187,9 @@ function resetAndClose() {
 .modal-panel {
   width: 100%;
   max-width: 480px;
+  max-height: calc(100vh - 2.5rem);
+  display: flex;
+  flex-direction: column;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -195,6 +198,7 @@ function resetAndClose() {
 }
 
 .modal-header {
+  flex-shrink: 0;
   padding: 1.25rem 1.5rem;
   border-bottom: 1px solid var(--border);
   display: flex;
@@ -223,6 +227,8 @@ function resetAndClose() {
 
 .modal-body {
   padding: 1.5rem;
+  overflow-y: auto;
+  flex: 1;
 }
 
 .hidden-file-input {
@@ -291,6 +297,7 @@ function resetAndClose() {
 .mt-3 { margin-top: 1rem; }
 
 .modal-footer {
+  flex-shrink: 0;
   padding: 1rem 1.5rem;
   border-top: 1px solid var(--border);
   background: var(--bg-surface);

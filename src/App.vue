@@ -133,6 +133,7 @@ const isPublished = computed(() => currentType.value === 'published');
 // Posts & Drafts Repository Cache
 const publishedPosts = ref([]);
 const draftPosts = ref([]);
+const draftsError = ref('');
 const isLoadingPosts = ref(false);
 const knownTags = ref([]);
 const githubConfig = ref(getGithubConfig());
@@ -274,37 +275,44 @@ async function refreshPostsList() {
     publishedPosts.value = parsedPublished;
 
     // 2. Fetch drafts from private drafts repository
-    const draftFiles = await fetchDraftFilesList();
-    const parsedDrafts = await Promise.all(
-      draftFiles.map(async (file) => {
-        try {
-          const contentData = await fetchPostContent(file.path, true);
-          const parsed = parsePost(contentData.rawText);
-          (parsed.frontmatter.tags || []).forEach(t => tagSet.add(t));
-          return {
-            ...file,
-            frontmatter: parsed.frontmatter,
-            sha: contentData.sha
-          };
-        } catch {
-          return {
-            ...file,
-            frontmatter: { title: file.name, pubDate: '', updatedDate: '', tags: [] }
-          };
-        }
-      })
-    );
+    try {
+      draftsError.value = '';
+      const draftFiles = await fetchDraftFilesList();
+      const parsedDrafts = await Promise.all(
+        draftFiles.map(async (file) => {
+          try {
+            const contentData = await fetchPostContent(file.path, true);
+            const parsed = parsePost(contentData.rawText);
+            (parsed.frontmatter.tags || []).forEach(t => tagSet.add(t));
+            return {
+              ...file,
+              frontmatter: parsed.frontmatter,
+              sha: contentData.sha
+            };
+          } catch {
+            return {
+              ...file,
+              frontmatter: { title: file.name, pubDate: '', updatedDate: '', tags: [] }
+            };
+          }
+        })
+      );
 
-    parsedDrafts.sort((a, b) => {
-      const dateA = new Date(a.frontmatter?.updatedDate || a.frontmatter?.pubDate || 0).getTime();
-      const dateB = new Date(b.frontmatter?.updatedDate || b.frontmatter?.pubDate || 0).getTime();
-      return dateB - dateA;
-    });
+      parsedDrafts.sort((a, b) => {
+        const dateA = new Date(a.frontmatter?.updatedDate || a.frontmatter?.pubDate || 0).getTime();
+        const dateB = new Date(b.frontmatter?.updatedDate || b.frontmatter?.pubDate || 0).getTime();
+        return dateB - dateA;
+      });
 
-    draftPosts.value = parsedDrafts;
+      draftPosts.value = parsedDrafts;
+    } catch (draftErr) {
+      console.warn('Could not refresh drafts:', draftErr);
+      draftsError.value = draftErr.message || 'Could not load private drafts.';
+    }
+
     knownTags.value = Array.from(tagSet);
   } catch (err) {
-    console.warn('Could not refresh posts/drafts:', err);
+    console.warn('Could not refresh posts:', err);
   } finally {
     isLoadingPosts.value = false;
   }
@@ -686,6 +694,7 @@ watch(isSourceMode, (newVal) => {
       :isOpen="showPostsModal"
       :publishedPosts="publishedPosts"
       :draftPosts="draftPosts"
+      :draftsError="draftsError"
       :isLoading="isLoadingPosts"
       :currentFilename="currentFilename || ''"
       :currentType="currentType"
@@ -694,6 +703,7 @@ watch(isSourceMode, (newVal) => {
       @deleteDraft="handleDeleteDraft"
       @createNew="createNewPost"
       @refreshPosts="refreshPostsList"
+      @openSettings="showSettingsModal = true; showPostsModal = false"
     />
 
     <ImageUploadModal
