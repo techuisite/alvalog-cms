@@ -65,6 +65,15 @@ async function handleTest() {
       branch: branch.value
     });
     testResult.value = res;
+
+    // Automatically persist settings immediately on test success
+    saveGithubConfig({
+      token: token.value,
+      repo: repo.value,
+      draftsRepo: draftsRepo.value,
+      branch: branch.value
+    });
+    emit('configSaved');
   } catch (err) {
     testError.value = err.message || 'Connection test failed.';
   } finally {
@@ -147,12 +156,17 @@ function handleClearCache() {
           </svg>
           <h3>GitHub Settings</h3>
         </div>
-        <button class="btn-icon" @click="emit('close')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
+        <div class="header-right-actions">
+          <button class="btn-primary sm" @click="handleSave" :disabled="!token">
+            Save
+          </button>
+          <button class="btn-icon" @click="emit('close')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div class="modal-body">
@@ -237,17 +251,36 @@ function handleClearCache() {
             {{ isTesting ? 'Testing...' : 'Test Connection' }}
           </button>
 
-          <div v-if="testResult" class="test-success">
-            <img :src="testResult.user.avatar_url" class="avatar-img" />
-            <div>
-              <div class="user-name">Connected as <strong>@{{ testResult.user.login }}</strong></div>
-              <div class="repo-check">Access verified to {{ testResult.repo.full_name }}</div>
-              <div v-if="testResult.draftsRepo" class="repo-check" style="margin-top: 3px; color: #38bdf8;">
-                🔒 Private drafts verified in {{ testResult.draftsRepo.full_name }}
+          <div v-if="testResult" class="test-success-card">
+            <div class="test-card-top">
+              <img :src="testResult.user.avatar_url" class="avatar-img" />
+              <div class="test-card-meta">
+                <div class="user-name">
+                  Connected as <strong>@{{ testResult.user.login }}</strong>
+                  <span class="saved-pill">✓ Saved</span>
+                </div>
+                <div class="repo-check">Blog: {{ testResult.repo.full_name }}</div>
+                <div v-if="testResult.draftsRepo" class="repo-check text-cyan">
+                  🔒 Private Drafts: {{ testResult.draftsRepo.full_name }}
+                </div>
               </div>
-              <div v-else-if="testResult.draftsRepoError" class="repo-warning" style="margin-top: 4px; color: #f59e0b; font-size: 0.76rem; line-height: 1.4;">
-                ⚠️ {{ testResult.draftsRepoError }}
+              <button class="btn-secondary sm btn-done" @click="emit('close')">
+                Done
+              </button>
+            </div>
+
+            <div v-if="testResult.draftsRepoError" class="drafts-warning-box">
+              <div class="warning-title">⚠️ Action needed for Private Drafts:</div>
+              <div class="warning-msg">
+                Your token is connected to your blog, but needs access to <strong>{{ draftsRepo }}</strong> to load private drafts.
               </div>
+              <a
+                href="https://github.com/settings/tokens"
+                target="_blank"
+                class="warning-link"
+              >
+                Add {{ draftsRepo }} to token permissions on GitHub ↗
+              </a>
             </div>
           </div>
 
@@ -356,35 +389,48 @@ function handleClearCache() {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
+  background: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(4px);
   z-index: 70;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 1rem;
+  padding: 1rem 0.75rem;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .modal-panel {
   width: 100%;
   max-width: 520px;
-  max-height: calc(100vh - 2.5rem);
+  max-height: min(88vh, 580px);
+  min-height: 0;
+  margin: auto;
   display: flex;
   flex-direction: column;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  flex-shrink: 0;
 }
 
 .modal-header {
-  flex-shrink: 0;
-  padding: 1.1rem 1.5rem;
+  flex: 0 0 auto;
+  padding: 0.85rem 1.25rem;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  background: var(--bg-surface);
+  z-index: 2;
+}
+
+.header-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .header-title {
@@ -407,14 +453,15 @@ function handleClearCache() {
 }
 
 .modal-body {
-  padding: 1.25rem 1.5rem;
+  padding: 1.15rem 1.25rem;
   display: flex;
   flex-direction: column;
-  gap: 1.15rem;
+  gap: 1.1rem;
   overflow-y: auto;
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .settings-intro {
@@ -461,31 +508,94 @@ function handleClearCache() {
   border-top: 1px solid var(--border);
 }
 
-.test-success {
+.test-success-card {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  background: rgba(34, 197, 94, 0.12);
+  flex-direction: column;
+  gap: 0.5rem;
+  background: rgba(34, 197, 94, 0.1);
   border: 1px solid rgba(34, 197, 94, 0.25);
   padding: 0.65rem 0.85rem;
   border-radius: 8px;
-  color: #22c55e;
-  font-size: 0.85rem;
+}
+
+.test-card-top {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.test-card-meta {
+  flex: 1;
+  min-width: 0;
 }
 
 .avatar-img {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .user-name {
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text-heading);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.saved-pill {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.2);
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
 }
 
 .repo-check {
   font-size: 0.75rem;
-  opacity: 0.85;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+
+.text-cyan {
+  color: #38bdf8 !important;
+}
+
+.btn-done {
+  white-space: nowrap;
+  font-size: 0.8rem;
+  padding: 0.3rem 0.65rem;
+  flex-shrink: 0;
+}
+
+.drafts-warning-box {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: 6px;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  color: #f59e0b;
+}
+
+.warning-title {
+  font-weight: 600;
+  margin-bottom: 0.15rem;
+}
+
+.warning-msg {
+  color: var(--text-heading);
+}
+
+.warning-link {
+  display: inline-block;
+  margin-top: 0.35rem;
+  color: var(--accent);
+  text-decoration: underline;
+  font-weight: 600;
 }
 
 .test-error {

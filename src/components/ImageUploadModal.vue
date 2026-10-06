@@ -175,31 +175,36 @@ function resetAndClose() {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
+  background: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(4px);
   z-index: 70;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 1rem;
+  padding: 1rem 0.75rem;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .modal-panel {
   width: 100%;
   max-width: 480px;
-  max-height: calc(100vh - 2.5rem);
+  max-height: min(88vh, 580px);
+  min-height: 0;
+  margin: auto;
   display: flex;
   flex-direction: column;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  flex-shrink: 0;
 }
 
 .modal-header {
-  flex-shrink: 0;
-  padding: 1.25rem 1.5rem;
+  flex: 0 0 auto;
+  padding: 0.85rem 1.25rem;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -226,9 +231,11 @@ function resetAndClose() {
 }
 
 .modal-body {
-  padding: 1.5rem;
+  padding: 1.25rem;
   overflow-y: auto;
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  -webkit-overflow-scrolling: touch;
 }
 
 .hidden-file-input {
@@ -297,8 +304,8 @@ function resetAndClose() {
 .mt-3 { margin-top: 1rem; }
 
 .modal-footer {
-  flex-shrink: 0;
-  padding: 1rem 1.5rem;
+  flex: 0 0 auto;
+  padding: 0.85rem 1.25rem;
   border-top: 1px solid var(--border);
   background: var(--bg-surface);
 }

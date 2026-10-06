@@ -236,86 +236,164 @@ async function loadPost(item, type = 'published') {
   }
 }
 
+// ── Frontmatter SHA Cache for Instant Post Loading ──────────
+const FRONTMATTER_CACHE_KEY = 'alvalog_frontmatter_cache';
+
+function getFrontmatterCache() {
+  try {
+    return JSON.parse(localStorage.getItem(FRONTMATTER_CACHE_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function saveFrontmatterCache(cache) {
+  try {
+    localStorage.setItem(FRONTMATTER_CACHE_KEY, JSON.stringify(cache));
+  } catch (e) {
+    console.warn('Could not save frontmatter cache:', e);
+  }
+}
+
+function formatSlugToTitle(filename) {
+  return filename
+    .replace(/\.md$/, '')
+    .replace(/[-_]/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase());
+}
+
 // ── Refresh Posts & Drafts Lists from GitHub ──────────────
 async function refreshPostsList() {
-  if (!hasToken.value) return;
+  if (!hasToken.value) {
+    isLoadingPosts.value = false;
+    return;
+  }
+
   isLoadingPosts.value = true;
+  draftsError.value = '';
 
-  try {
-    const tagSet = new Set();
+  const tagSet = new Set();
+  const cache = getFrontmatterCache();
 
-    // 1. Fetch published posts
-    const postFiles = await fetchPostFilesList();
-    const parsedPublished = await Promise.all(
-      postFiles.map(async (file) => {
-        try {
-          const contentData = await fetchPostContent(file.path);
-          const parsed = parsePost(contentData.rawText);
-          (parsed.frontmatter.tags || []).forEach(t => tagSet.add(t));
-          return {
-            ...file,
-            frontmatter: parsed.frontmatter,
-            sha: contentData.sha
-          };
-        } catch {
-          return {
-            ...file,
-            frontmatter: { title: file.name, pubDate: '', tags: [] }
-          };
-        }
-      })
-    );
+  // Run published posts and drafts independently in parallel
+  await Promise.allSettled([
+    // 1. Fetch & parse published posts
+    (async () => {
+      try {
+        const postFiles = await fetchPostFilesList();
 
-    parsedPublished.sort((a, b) => {
-      const dateA = new Date(a.frontmatter?.pubDate || 0).getTime();
-      const dateB = new Date(b.frontmatter?.pubDate || 0).getTime();
-      return dateB - dateA;
-    });
-
-    publishedPosts.value = parsedPublished;
-
-    // 2. Fetch drafts from private drafts repository
-    try {
-      draftsError.value = '';
-      const draftFiles = await fetchDraftFilesList();
-      const parsedDrafts = await Promise.all(
-        draftFiles.map(async (file) => {
-          try {
-            const contentData = await fetchPostContent(file.path, true);
-            const parsed = parsePost(contentData.rawText);
-            (parsed.frontmatter.tags || []).forEach(t => tagSet.add(t));
+        // Immediate responsive display: map with cache or formatted slug
+        const list = postFiles.map(file => {
+          const cached = cache[file.sha];
+          if (cached) {
+            (cached.tags || []).forEach(t => tagSet.add(t));
             return {
               ...file,
-              frontmatter: parsed.frontmatter,
-              sha: contentData.sha
-            };
-          } catch {
-            return {
-              ...file,
-              frontmatter: { title: file.name, pubDate: '', updatedDate: '', tags: [] }
+              frontmatter: cached,
+              sha: file.sha
             };
           }
-        })
-      );
+          return {
+            ...file,
+            frontmatter: {
+              title: formatSlugToTitle(file.name),
+              pubDate: '',
+              tags: []
+            },
+            sha: file.sha,
+            _needsFetch: true
+          };
+        });
 
-      parsedDrafts.sort((a, b) => {
-        const dateA = new Date(a.frontmatter?.updatedDate || a.frontmatter?.pubDate || 0).getTime();
-        const dateB = new Date(b.frontmatter?.updatedDate || b.frontmatter?.pubDate || 0).getTime();
-        return dateB - dateA;
-      });
+        // Show all posts in modal immediately without blocking
+        publishedPosts.value = [...list].sort((a, b) => {
+          const dateA = new Date(a.frontmatter?.pubDate || 0).getTime();
+          const dateB = new Date(b.frontmatter?.pubDate || 0).getTime();
+          return dateB - dateA;
+        });
 
-      draftPosts.value = parsedDrafts;
-    } catch (draftErr) {
-      console.warn('Could not refresh drafts:', draftErr);
-      draftsError.value = draftErr.message || 'Could not load private drafts.';
-    }
+        // Fetch uncached posts in gentle batches of 6 (avoids rate limits)
+        const uncached = list.filter(f => f._needsFetch);
+        if (uncached.length > 0) {
+          const BATCH_SIZE = 6;
+          for (let i = 0; i < uncached.length; i += BATCH_SIZE) {
+            const batch = uncached.slice(i, i + BATCH_SIZE);
+            await Promise.allSettled(batch.map(async file => {
+              try {
+                const contentData = await fetchPostContent(file.path);
+                const parsed = parsePost(contentData.rawText);
+                cache[contentData.sha] = parsed.frontmatter;
+                (parsed.frontmatter.tags || []).forEach(t => tagSet.add(t));
 
-    knownTags.value = Array.from(tagSet);
-  } catch (err) {
-    console.warn('Could not refresh posts:', err);
-  } finally {
-    isLoadingPosts.value = false;
-  }
+                const idx = publishedPosts.value.findIndex(p => p.sha === file.sha || p.name === file.name);
+                if (idx !== -1) {
+                  publishedPosts.value[idx].frontmatter = parsed.frontmatter;
+                }
+              } catch (e) {
+                console.warn(`Could not load frontmatter for ${file.name}:`, e);
+              }
+            }));
+          }
+          saveFrontmatterCache(cache);
+
+          // Re-sort with accurate frontmatter dates
+          publishedPosts.value = [...publishedPosts.value].sort((a, b) => {
+            const dateA = new Date(a.frontmatter?.pubDate || 0).getTime();
+            const dateB = new Date(b.frontmatter?.pubDate || 0).getTime();
+            return dateB - dateA;
+          });
+        }
+      } catch (err) {
+        console.warn('Could not refresh published posts:', err);
+      }
+    })(),
+
+    // 2. Fetch & parse private cloud drafts
+    (async () => {
+      try {
+        const draftFiles = await fetchDraftFilesList();
+        const parsedDrafts = await Promise.all(
+          draftFiles.map(async (file) => {
+            try {
+              const contentData = await fetchPostContent(file.path, true);
+              const parsed = parsePost(contentData.rawText);
+              (parsed.frontmatter.tags || []).forEach(t => tagSet.add(t));
+              return {
+                ...file,
+                frontmatter: parsed.frontmatter,
+                sha: contentData.sha
+              };
+            } catch {
+              return {
+                ...file,
+                frontmatter: {
+                  title: formatSlugToTitle(file.name),
+                  pubDate: '',
+                  updatedDate: '',
+                  tags: []
+                },
+                sha: file.sha
+              };
+            }
+          })
+        );
+
+        parsedDrafts.sort((a, b) => {
+          const dateA = new Date(a.frontmatter?.updatedDate || a.frontmatter?.pubDate || 0).getTime();
+          const dateB = new Date(b.frontmatter?.updatedDate || b.frontmatter?.pubDate || 0).getTime();
+          return dateB - dateA;
+        });
+
+        draftPosts.value = parsedDrafts;
+      } catch (draftErr) {
+        console.warn('Could not refresh drafts:', draftErr);
+        draftsError.value = draftErr.message || 'Could not load private drafts.';
+      }
+    })()
+  ]);
+
+  knownTags.value = Array.from(tagSet);
+  isLoadingPosts.value = false;
 }
 
 // ── Save Draft to GitHub (Does NOT trigger Astro build) ───

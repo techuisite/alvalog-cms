@@ -143,11 +143,20 @@ function onDeleteDraft(item) {
       <div class="post-list">
         <!-- Drafts Error Banner -->
         <div v-if="activeTab === 'drafts' && draftsError" class="drafts-error-banner">
-          <div class="drafts-error-icon">⚠️</div>
+          <div class="drafts-error-icon">🔒</div>
           <div class="drafts-error-content">
-            <div class="drafts-error-title">Cannot access private drafts repository</div>
-            <div class="drafts-error-text">{{ draftsError }}</div>
-            <button class="drafts-error-btn" @click="emit('openSettings')">Open GitHub Settings</button>
+            <div class="drafts-error-title">Private Drafts Access Needed</div>
+            <div class="drafts-error-text">
+              {{ draftsError }}
+            </div>
+            <div class="drafts-error-actions">
+              <a href="https://github.com/settings/tokens" target="_blank" class="drafts-error-link">
+                Update Token Permissions on GitHub ↗
+              </a>
+              <button class="drafts-error-btn" @click="emit('openSettings')">
+                Open GitHub Settings
+              </button>
+            </div>
           </div>
         </div>
 
@@ -163,7 +172,8 @@ function onDeleteDraft(item) {
             <p class="empty-hint">Drafts are stored securely in your private <code>techuisite/alvalog-drafts</code> repository.</p>
           </template>
           <template v-else>
-            <p>No published posts found matching your search.</p>
+            <p class="empty-title">No published posts found</p>
+            <p class="empty-hint">If this is your first time, make sure your GitHub token is connected in Settings.</p>
           </template>
         </div>
 
@@ -220,30 +230,36 @@ function onDeleteDraft(item) {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
+  background: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(4px);
   z-index: 60;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 1rem;
+  padding: 1rem 0.75rem;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .modal-panel {
   width: 100%;
   max-width: 620px;
-  max-height: 82vh;
+  max-height: min(88vh, 620px);
+  min-height: 0;
+  margin: auto;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 12px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  flex-shrink: 0;
 }
 
 .modal-header {
-  padding: 1rem 1.25rem;
+  flex: 0 0 auto;
+  padding: 0.85rem 1.25rem;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -608,8 +624,22 @@ function onDeleteDraft(item) {
   line-height: 1.45;
 }
 
-.drafts-error-btn {
+.drafts-error-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   margin-top: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.drafts-error-link {
+  font-size: 0.78rem;
+  color: var(--accent);
+  text-decoration: underline;
+  font-weight: 600;
+}
+
+.drafts-error-btn {
   padding: 0.35rem 0.75rem;
   background: var(--bg-surface);
   border: 1px solid var(--border);
