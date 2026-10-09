@@ -1,16 +1,34 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import {
+  isDevicePaired,
   isSecuritySetup,
   verifyPasscode,
   setupPasscode,
   isBiometricEnabled,
-  verifyBiometrics
+  verifyBiometrics,
+  unpairDevice
 } from '../services/auth.js';
+import { testConnection, saveGithubConfig } from '../services/github.js';
 
-const emit = defineEmits(['unlocked']);
+const emit = defineEmits(['unlocked', 'paired']);
 
-const isConfigured = ref(isSecuritySetup());
+const isPaired = ref(isDevicePaired());
+const hasPin = ref(isSecuritySetup());
+
+// Determines the screen mode:
+// - 'authorize': Device is not paired with a verified GitHub token
+// - 'set_pin': Device was verified, needs to set device PIN
+// - 'unlock': Device is paired and PIN is set, ready for PIN/Biometric unlock
+const screenMode = ref(!isPaired.value ? 'authorize' : (!hasPin.value ? 'set_pin' : 'unlock'));
+
+// State for Authorize mode
+const tokenInput = ref('');
+const isVerifyingToken = ref(false);
+const verifiedUser = ref(null);
+const showToken = ref(false);
+
+// State for PIN / Unlock mode
 const pin = ref('');
 const confirmPin = ref('');
 const errorMsg = ref('');
@@ -18,29 +36,54 @@ const isShaking = ref(false);
 const hasBiometrics = ref(isBiometricEnabled());
 const isBiometricBusy = ref(false);
 
+// Rate limiting & Brute force protection
+const failedAttempts = ref(0);
+const lockoutRemaining = ref(0);
+let lockoutTimer = null;
+
+const isLockedOut = computed(() => lockoutRemaining.value > 0);
+
 onMounted(() => {
-  // If biometric is enabled on this device, auto-prompt for instant unlock
-  if (isConfigured.value && hasBiometrics.value) {
+  // If paired and biometric is enabled on this device, auto-prompt for instant unlock
+  if (screenMode.value === 'unlock' && hasBiometrics.value && !isLockedOut.value) {
     handleBiometricUnlock();
   }
 });
 
-async function handleUnlock() {
-  errorMsg.value = '';
-  if (!pin.value) return;
+onBeforeUnmount(() => {
+  if (lockoutTimer) clearInterval(lockoutTimer);
+});
 
-  const valid = await verifyPasscode(pin.value);
-  if (valid) {
-    emit('unlocked');
-  } else {
-    triggerError('Incorrect passcode. Please try again.');
+async function handleAuthorize() {
+  errorMsg.value = '';
+  const token = tokenInput.value.trim();
+  if (!token) {
+    triggerError('Please enter your GitHub Personal Access Token.');
+    return;
+  }
+
+  isVerifyingToken.value = true;
+  try {
+    const res = await testConnection({ token });
+    // Token is verified! Save it to device storage
+    saveGithubConfig({ token });
+    verifiedUser.value = res.user;
+    isPaired.value = true;
+    errorMsg.value = '';
+    // Advance to set device PIN
+    screenMode.value = 'set_pin';
+    emit('paired');
+  } catch (err) {
+    triggerError(err.message || 'Authorization failed. Token is invalid or lacks access to this blog.');
+  } finally {
+    isVerifyingToken.value = false;
   }
 }
 
-async function handleSetup() {
+async function handleSetupPin() {
   errorMsg.value = '';
   if (!pin.value || pin.value.length < 4) {
-    errorMsg.value = 'Passcode must be at least 4 digits.';
+    triggerError('Passcode must be at least 4 digits.');
     return;
   }
   if (pin.value !== confirmPin.value) {
@@ -49,22 +92,72 @@ async function handleSetup() {
   }
 
   await setupPasscode(pin.value);
-  isConfigured.value = true;
+  hasPin.value = true;
+  screenMode.value = 'unlock';
   emit('unlocked');
 }
 
+async function handleUnlock() {
+  if (isLockedOut.value) return;
+  errorMsg.value = '';
+  if (!pin.value) return;
+
+  const valid = await verifyPasscode(pin.value);
+  if (valid) {
+    failedAttempts.value = 0;
+    emit('unlocked');
+  } else {
+    failedAttempts.value++;
+    if (failedAttempts.value >= 5) {
+      const waitSec = failedAttempts.value >= 8 ? 300 : 60;
+      startLockout(waitSec);
+      triggerError(`Too many failed attempts. Locked out for ${waitSec}s.`);
+    } else {
+      const remaining = 5 - failedAttempts.value;
+      triggerError(`Incorrect passcode. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`);
+    }
+  }
+}
+
+function startLockout(seconds) {
+  lockoutRemaining.value = seconds;
+  pin.value = '';
+  if (lockoutTimer) clearInterval(lockoutTimer);
+  lockoutTimer = setInterval(() => {
+    lockoutRemaining.value--;
+    if (lockoutRemaining.value <= 0) {
+      clearInterval(lockoutTimer);
+      lockoutTimer = null;
+    }
+  }, 1000);
+}
+
 async function handleBiometricUnlock() {
+  if (isLockedOut.value) return;
   isBiometricBusy.value = true;
   errorMsg.value = '';
   try {
     const success = await verifyBiometrics();
     if (success) {
+      failedAttempts.value = 0;
       emit('unlocked');
     }
   } catch (err) {
     console.log('Biometric unlock bypassed or canceled:', err);
   } finally {
     isBiometricBusy.value = false;
+  }
+}
+
+function handleUnpair() {
+  if (window.confirm('Unpair this device?\n\nThis will remove your stored GitHub token and passcode from this device.')) {
+    unpairDevice();
+    isPaired.value = false;
+    hasPin.value = false;
+    tokenInput.value = '';
+    pin.value = '';
+    confirmPin.value = '';
+    screenMode.value = 'authorize';
   }
 }
 
@@ -76,22 +169,6 @@ function triggerError(msg) {
   setTimeout(() => {
     isShaking.value = false;
   }, 450);
-}
-
-function handleKeypad(num) {
-  if (pin.value.length < 8) {
-    pin.value += String(num);
-    if (isConfigured.value && pin.value.length >= 4) {
-      // Auto-submit on 4+ digits if matching
-      verifyPasscode(pin.value).then(valid => {
-        if (valid) emit('unlocked');
-      });
-    }
-  }
-}
-
-function handleBackspace() {
-  pin.value = pin.value.slice(0, -1);
 }
 </script>
 
@@ -107,13 +184,12 @@ function handleBackspace() {
           </svg>
         </div>
         <h2 class="lock-title">Alvalog<span class="dot">.</span> CMS</h2>
-        <p class="lock-subtitle">
-          {{ isConfigured ? 'Enter your passcode to unlock' : 'Create a passcode to secure your CMS' }}
-        </p>
       </div>
 
-      <!-- Mode 1: Already Configured - Unlock Screen -->
-      <form v-if="isConfigured" @submit.prevent="handleUnlock" class="lock-form">
+      <!-- Mode 1: Daily Unlock Screen (Device is Paired & PIN is Set) -->
+      <form v-if="screenMode === 'unlock'" @submit.prevent="handleUnlock" class="lock-form">
+        <p class="lock-subtitle">Enter your passcode to unlock</p>
+
         <div class="pin-display">
           <input
             type="password"
@@ -123,19 +199,27 @@ function handleBackspace() {
             class="pin-input"
             placeholder="••••"
             maxlength="8"
+            :disabled="isLockedOut"
             autofocus
           />
         </div>
 
-        <div v-if="errorMsg" class="lock-error">{{ errorMsg }}</div>
+        <div v-if="lockoutRemaining > 0" class="lock-countdown">
+          ⚠️ Too many failed attempts. Try again in <strong>{{ lockoutRemaining }}s</strong>
+        </div>
+        <div v-else-if="errorMsg" class="lock-error">{{ errorMsg }}</div>
 
-        <button type="submit" class="btn-primary w-full unlock-btn">
+        <button
+          type="submit"
+          class="btn-primary w-full unlock-btn"
+          :disabled="isLockedOut || !pin"
+        >
           Unlock
         </button>
 
-        <!-- Biometric Button (FaceID / Fingerprint) -->
+        <!-- Biometric Button (FaceID / TouchID / Fingerprint) -->
         <button
-          v-if="hasBiometrics"
+          v-if="hasBiometrics && !isLockedOut"
           type="button"
           class="btn-biometric w-full"
           :disabled="isBiometricBusy"
@@ -144,33 +228,46 @@ function handleBackspace() {
           <svg class="bio-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 2a10 10 0 0 0-10 10c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z"></path>
           </svg>
-          Unlock with FaceID / Fingerprint
+          Unlock with FaceID / TouchID
         </button>
+
+        <div class="lock-footer-links">
+          <button type="button" class="btn-text-muted" @click="handleUnpair">
+            Unpair this device
+          </button>
+        </div>
       </form>
 
-      <!-- Mode 2: First Time Setup -->
-      <form v-else @submit.prevent="handleSetup" class="lock-form">
-        <div class="form-group">
-          <label class="form-label">Create Passcode (4-8 digits)</label>
+      <!-- Mode 2: Set PIN on Verified Device -->
+      <form v-else-if="screenMode === 'set_pin'" @submit.prevent="handleSetupPin" class="lock-form">
+        <div v-if="verifiedUser" class="verified-pill">
+          ✓ Verified as <strong>@{{ verifiedUser.login }}</strong>
+        </div>
+        <p class="lock-subtitle">
+          Create a 4-8 digit passcode for quick access on this device.
+        </p>
+
+        <div class="form-group w-full">
+          <label class="form-label">Create Passcode</label>
           <input
             type="password"
             v-model="pin"
             inputmode="numeric"
             class="form-input text-center"
-            placeholder="Enter passcode"
+            placeholder="••••"
             maxlength="8"
             autofocus
           />
         </div>
 
-        <div class="form-group mt-2">
+        <div class="form-group w-full mt-2">
           <label class="form-label">Confirm Passcode</label>
           <input
             type="password"
             v-model="confirmPin"
             inputmode="numeric"
             class="form-input text-center"
-            placeholder="Confirm passcode"
+            placeholder="••••"
             maxlength="8"
           />
         </div>
@@ -178,7 +275,60 @@ function handleBackspace() {
         <div v-if="errorMsg" class="lock-error">{{ errorMsg }}</div>
 
         <button type="submit" class="btn-primary w-full mt-3">
-          Set Passcode & Start Writing
+          Save Passcode & Start Writing
+        </button>
+      </form>
+
+      <!-- Mode 3: Device Authorization Required (New Browser / Stranger) -->
+      <form v-else @submit.prevent="handleAuthorize" class="lock-form">
+        <div class="auth-gate-badge">
+          <span>🔒 Private Console</span>
+        </div>
+        <p class="lock-auth-desc">
+          This CMS is private. Enter your GitHub Personal Access Token to authorize this device.
+        </p>
+
+        <div class="form-group w-full">
+          <label class="form-label">
+            <span>GitHub Personal Access Token</span>
+            <a
+              href="https://github.com/settings/tokens?type=beta"
+              target="_blank"
+              class="token-link"
+            >
+              Generate ↗
+            </a>
+          </label>
+          <div class="token-input-wrapper">
+            <input
+              :type="showToken ? 'text' : 'password'"
+              v-model="tokenInput"
+              class="form-input"
+              placeholder="github_pat_..."
+              autofocus
+              autocomplete="off"
+            />
+            <button
+              type="button"
+              class="btn-token-toggle"
+              @click="showToken = !showToken"
+            >
+              {{ showToken ? 'Hide' : 'Show' }}
+            </button>
+          </div>
+          <div class="token-hint">
+            Must have <strong>Contents</strong> permission for <code>techuisite/techuisite.github.io</code>.
+          </div>
+        </div>
+
+        <div v-if="errorMsg" class="lock-error">{{ errorMsg }}</div>
+
+        <button
+          type="submit"
+          class="btn-primary w-full mt-2"
+          :disabled="isVerifyingToken || !tokenInput.trim()"
+        >
+          {{ isVerifyingToken ? 'Verifying with GitHub...' : 'Authorize Device' }}
         </button>
       </form>
     </div>
@@ -199,7 +349,7 @@ function handleBackspace() {
 
 .lock-panel {
   width: 100%;
-  max-width: 360px;
+  max-width: 380px;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -212,7 +362,7 @@ function handleBackspace() {
 
 .lock-header {
   text-align: center;
-  margin-bottom: 1.75rem;
+  margin-bottom: 1.25rem;
 }
 
 .lock-icon-wrapper {
@@ -225,7 +375,7 @@ function handleBackspace() {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 1rem auto;
+  margin: 0 auto 0.85rem auto;
 }
 
 .lock-icon-wrapper svg {
@@ -248,7 +398,78 @@ function handleBackspace() {
 .lock-subtitle {
   font-size: 0.85rem;
   color: var(--text-muted);
-  margin-top: 0.4rem;
+  margin-top: 0.35rem;
+  text-align: center;
+}
+
+.lock-auth-desc {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+  text-align: center;
+  margin: 0.5rem 0 0.85rem 0;
+}
+
+.auth-gate-badge {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: #f59e0b;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.65rem;
+  border-radius: 20px;
+}
+
+.verified-pill {
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  color: #22c55e;
+  font-size: 0.8rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  margin-bottom: 0.5rem;
+}
+
+.token-link {
+  color: var(--accent);
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+
+.token-input-wrapper {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.btn-token-toggle {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 8px;
+  padding: 0 0.65rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.btn-token-toggle:hover {
+  color: var(--text-heading);
+}
+
+.token-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 0.35rem;
+  line-height: 1.4;
+}
+
+.token-hint strong {
+  color: var(--text-main);
+}
+
+.token-hint code {
+  background: var(--code-bg);
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
 }
 
 .lock-form {
@@ -282,6 +503,11 @@ function handleBackspace() {
 
 .pin-input:focus {
   border-color: var(--accent);
+}
+
+.pin-input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .unlock-btn {
@@ -319,6 +545,43 @@ function handleBackspace() {
   color: #ef4444;
   font-size: 0.8rem;
   text-align: center;
+  line-height: 1.4;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  width: 100%;
+}
+
+.lock-countdown {
+  color: #f59e0b;
+  font-size: 0.82rem;
+  text-align: center;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  width: 100%;
+}
+
+.lock-footer-links {
+  margin-top: 0.5rem;
+  display: flex;
+  justify-content: center;
+}
+
+.btn-text-muted {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-decoration: underline;
+  transition: color 0.15s;
+}
+
+.btn-text-muted:hover {
+  color: #ef4444;
 }
 
 .text-center {

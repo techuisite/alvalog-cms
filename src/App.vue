@@ -60,6 +60,7 @@ const isUnlocked = ref(isSessionUnlocked());
 
 function handleUnlocked() {
   isUnlocked.value = true;
+  githubConfig.value = getGithubConfig();
   nextTick(() => {
     if (markdownContent.value) {
       editorRef.value?.setContent(markdownContent.value);
@@ -611,8 +612,8 @@ onMounted(() => {
   // Load posts if token is present
   if (hasToken.value) {
     refreshPostsList();
-  } else {
-    // Open settings on first launch to guide user
+  } else if (isUnlocked.value) {
+    // Open settings only if unlocked and missing token
     showSettingsModal.value = true;
   }
 });

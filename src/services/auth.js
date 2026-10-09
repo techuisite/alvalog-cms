@@ -3,6 +3,8 @@
  * Uses browser native Web Crypto API (SHA-256) and WebAuthn (FaceID/Fingerprint).
  */
 
+import { getGithubConfig } from './github.js';
+
 const STORAGE_KEYS = {
   PIN_HASH: 'alvalog_pin_hash',
   PIN_SALT: 'alvalog_pin_salt',
@@ -32,11 +34,18 @@ async function hashPin(pin) {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+export function isDevicePaired() {
+  const cfg = getGithubConfig();
+  return !!cfg.token;
+}
+
 export function isSecuritySetup() {
   return !!localStorage.getItem(STORAGE_KEYS.PIN_HASH);
 }
 
 export function isSessionUnlocked() {
+  // If device is not paired with a verified GitHub token, it is NEVER unlocked
+  if (!isDevicePaired()) return false;
   // If no security set up yet, require setup (so lock/setup screen shows)
   if (!isSecuritySetup()) return false;
   return sessionStorage.getItem(STORAGE_KEYS.SESSION_UNLOCKED) === 'true';
@@ -76,6 +85,12 @@ export function removePasscode() {
   localStorage.removeItem(STORAGE_KEYS.PIN_HASH);
   localStorage.removeItem(STORAGE_KEYS.PIN_SALT);
   localStorage.removeItem(STORAGE_KEYS.BIOMETRIC_ID);
+  sessionStorage.removeItem(STORAGE_KEYS.SESSION_UNLOCKED);
+}
+
+export function unpairDevice() {
+  removePasscode();
+  localStorage.removeItem('alvalog_gh_token');
   sessionStorage.removeItem(STORAGE_KEYS.SESSION_UNLOCKED);
 }
 
